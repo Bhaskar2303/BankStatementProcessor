@@ -1,0 +1,1070 @@
+[
+    {
+        "id": "E1",
+        "created_at_utc": "2026-08-14T06:50:57.081053+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "Generalized rules to prevent similar failures in future bank statement extractions:\n\n1. **Mandatory Field Presence Check Before Final Merge**\n   - Before producing the final merged JSON, enforce a rule that critical fields must not be null for bank statements:\n     - Required: bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address.\n   - If more than a configurable threshold (e.g., >30%) of required fields are null, mark the extraction as incomplete and trigger a recovery workflow instead of returning a high-confidence, mostly-null JSON.\n\n2. **Confidence-Level Alignment With Data Completeness**\n   - Compute confidence_level based on both extraction certainty and field completeness.\n   - Rule: If any of statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address are null, cap confidence_level at a low value (e.g., <=0.3).\n   - Never assign confidence_level >=0.9 when any required field is null.\n\n3. **Fallback Extraction Pipeline for UNKNOWN or Atypical Layouts**\n   - When document type is UNKNOWN or template matching fails, apply a generic bank-statement heuristic parser:\n     - Search for date ranges using patterns like:\n       - \"Statement Period\" or \"Period\" followed by a date range (e.g., `MM/DD/YYYY - MM/DD/YYYY`, `DD MMM YYYY to DD MMM YYYY`).\n       - \"From\" / \"To\" near the top of the document.\n     - Search for statement_date near phrases like \"Statement Date\", \"Date of Statement\", or in the header area.\n     - Search for opening_balance and closing_balance near phrases like \"Opening Balance\", \"Beginning Balance\", \"Closing Balance\", \"Ending Balance\" in summary sections.\n     - Extract customer_name and mailing_address from the top-left or top-right block that resembles an address (multiple lines, includes street, city, state, ZIP).\n   - If primary template-based extraction fails, run this heuristic parser and merge its results, preferring non-null values.\n\n4. **Non-Null Precedence in Merge Logic**\n   - Adjust merge rules so that non-null values from any upstream extractor are never overwritten by null values from another source.\n   - Rule: For each field, if at least one candidate value is non-null and passes basic validation (e.g., date format, numeric format), select that value; only use null if all candidates are null or invalid.\n\n5. **Basic Format Validation for Key Fields**\n   - Apply lightweight validation before accepting extracted values:\n     - Dates (statement_period_start, statement_period_end, statement_date) must match recognized date formats and be plausible (e.g., within a reasonable range, end >= start).\n     - opening_balance and closing_balance must be numeric and formatted as currency where applicable.\n     - customer_name must contain alphabetic characters and not be generic placeholders (e.g., \"Customer\", \"Account Holder\").\n     - mailing_address must contain at least two lines and include typical address components (street + city/state/ZIP or equivalent).\n   - If a field fails validation, attempt alternate extraction methods (e.g., different regex, different region of the page) before setting it to null.\n\n6. **Transaction Extraction Sanity Check**\n   - If the document is identified as a bank statement but transactions list is empty:\n     - Re-scan the document for tabular structures with dates, descriptions, and amounts.\n     - Use line-based heuristics: rows containing a date + description + debit/credit amount.\n   - Only set transaction_count to 0 when no such patterns are found after at least one fallback attempt.\n\n7. **Error-Driven Re-Extraction Strategy**\n   - When validation reports null for any required field, automatically trigger a targeted re-extraction:\n     - For missing dates: re-run date-range and header-date detection.\n     - For missing customer_name/mailing_address: re-scan top sections for address blocks.\n     - For missing opening_balance: re-scan summary sections for balance labels.\n   - Integrate these re-extraction steps into the pipeline so that the final JSON reflects the best-effort extraction rather than the initial failure.\n\n8. **Explicit Handling of UNKNOWN Document Type**\n   - Do not treat UNKNOWN as a reason to skip extraction; instead:\n     - Apply generic bank-statement rules whenever the content includes banking keywords (e.g., \"Account\", \"Statement\", \"Balance\", bank names, routing/account numbers).\n     - If such keywords are present but template classification fails, still run the generic heuristic parser described above.\n\n9. **Logging and Diagnostics for Null-Dominant Outputs**\n   - When the final merged JSON has multiple null required fields, log:\n     - Which extraction stages produced non-null candidates (if any).\n     - Which rules or thresholds caused values to be discarded.\n   - Use these logs to refine regex patterns, layout models, and thresholds over time.\n\nBy enforcing completeness-aware confidence scoring, non-null precedence in merging, heuristic fallback parsing for UNKNOWN layouts, and targeted re-extraction when validation flags nulls, future bank statement extractions will be far less likely to produce nearly empty JSON outputs and will better populate statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, and mailing_address.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "extra": {
+            "errors": [
+                {
+                    "field": "statement_period_start",
+                    "message": "statement_period_start is null"
+                },
+                {
+                    "field": "statement_period_end",
+                    "message": "statement_period_end is null"
+                },
+                {
+                    "field": "statement_date",
+                    "message": "statement_date is null"
+                },
+                {
+                    "field": "opening_balance",
+                    "message": "opening_balance is null; cannot validate against previous statement closing_balance"
+                },
+                {
+                    "field": "customer_name",
+                    "message": "customer_name should not be empty or null"
+                },
+                {
+                    "field": "mailing_address",
+                    "message": "mailing_address should not be empty or null"
+                }
+            ],
+            "reflection": {
+                "mistake_description": "The merged extraction is effectively empty despite the presence of a bank statement source document. All key fields required for validation and downstream use (statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address) are null, and transactions are an empty list with transaction_count set to 0. This indicates a systemic extraction failure rather than isolated field-level errors. Likely issues include: (1) The extractor failed to detect or parse the document layout (e.g., treating the document as UNKNOWN type and skipping parsing logic); (2) Overly strict confidence thresholds or error handling may have caused the system to discard partially extracted values and default to null; (3) Missing or misconfigured templates/regex patterns for common bank statement headers (e.g., 'Statement Period', 'From/To', 'Account Summary', 'Opening Balance', 'Closing Balance', 'Customer Name', 'Mailing Address'); (4) No fallback strategy was applied when primary extraction methods failed (e.g., no OCR re-run, no alternate layout model, no heuristic parsing); (5) The merger logic may have overwritten non-null values from upstream extractions with nulls due to incorrect precedence rules or misalignment of field names. As a result, validation rules correctly flagged the nulls, but there was no mechanism to recover or re-attempt extraction. This pattern suggests that whenever the document type is unknown or the layout deviates from expected templates, the system is prone to returning a fully null JSON with high confidence_level, which is misleading and prevents targeted correction.",
+                "corrected_extraction": "Generalized rules to prevent similar failures in future bank statement extractions:\n\n1. **Mandatory Field Presence Check Before Final Merge**\n   - Before producing the final merged JSON, enforce a rule that critical fields must not be null for bank statements:\n     - Required: bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address.\n   - If more than a configurable threshold (e.g., >30%) of required fields are null, mark the extraction as incomplete and trigger a recovery workflow instead of returning a high-confidence, mostly-null JSON.\n\n2. **Confidence-Level Alignment With Data Completeness**\n   - Compute confidence_level based on both extraction certainty and field completeness.\n   - Rule: If any of statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address are null, cap confidence_level at a low value (e.g., <=0.3).\n   - Never assign confidence_level >=0.9 when any required field is null.\n\n3. **Fallback Extraction Pipeline for UNKNOWN or Atypical Layouts**\n   - When document type is UNKNOWN or template matching fails, apply a generic bank-statement heuristic parser:\n     - Search for date ranges using patterns like:\n       - \"Statement Period\" or \"Period\" followed by a date range (e.g., `MM/DD/YYYY - MM/DD/YYYY`, `DD MMM YYYY to DD MMM YYYY`).\n       - \"From\" / \"To\" near the top of the document.\n     - Search for statement_date near phrases like \"Statement Date\", \"Date of Statement\", or in the header area.\n     - Search for opening_balance and closing_balance near phrases like \"Opening Balance\", \"Beginning Balance\", \"Closing Balance\", \"Ending Balance\" in summary sections.\n     - Extract customer_name and mailing_address from the top-left or top-right block that resembles an address (multiple lines, includes street, city, state, ZIP).\n   - If primary template-based extraction fails, run this heuristic parser and merge its results, preferring non-null values.\n\n4. **Non-Null Precedence in Merge Logic**\n   - Adjust merge rules so that non-null values from any upstream extractor are never overwritten by null values from another source.\n   - Rule: For each field, if at least one candidate value is non-null and passes basic validation (e.g., date format, numeric format), select that value; only use null if all candidates are null or invalid.\n\n5. **Basic Format Validation for Key Fields**\n   - Apply lightweight validation before accepting extracted values:\n     - Dates (statement_period_start, statement_period_end, statement_date) must match recognized date formats and be plausible (e.g., within a reasonable range, end >= start).\n     - opening_balance and closing_balance must be numeric and formatted as currency where applicable.\n     - customer_name must contain alphabetic characters and not be generic placeholders (e.g., \"Customer\", \"Account Holder\").\n     - mailing_address must contain at least two lines and include typical address components (street + city/state/ZIP or equivalent).\n   - If a field fails validation, attempt alternate extraction methods (e.g., different regex, different region of the page) before setting it to null.\n\n6. **Transaction Extraction Sanity Check**\n   - If the document is identified as a bank statement but transactions list is empty:\n     - Re-scan the document for tabular structures with dates, descriptions, and amounts.\n     - Use line-based heuristics: rows containing a date + description + debit/credit amount.\n   - Only set transaction_count to 0 when no such patterns are found after at least one fallback attempt.\n\n7. **Error-Driven Re-Extraction Strategy**\n   - When validation reports null for any required field, automatically trigger a targeted re-extraction:\n     - For missing dates: re-run date-range and header-date detection.\n     - For missing customer_name/mailing_address: re-scan top sections for address blocks.\n     - For missing opening_balance: re-scan summary sections for balance labels.\n   - Integrate these re-extraction steps into the pipeline so that the final JSON reflects the best-effort extraction rather than the initial failure.\n\n8. **Explicit Handling of UNKNOWN Document Type**\n   - Do not treat UNKNOWN as a reason to skip extraction; instead:\n     - Apply generic bank-statement rules whenever the content includes banking keywords (e.g., \"Account\", \"Statement\", \"Balance\", bank names, routing/account numbers).\n     - If such keywords are present but template classification fails, still run the generic heuristic parser described above.\n\n9. **Logging and Diagnostics for Null-Dominant Outputs**\n   - When the final merged JSON has multiple null required fields, log:\n     - Which extraction stages produced non-null candidates (if any).\n     - Which rules or thresholds caused values to be discarded.\n   - Use these logs to refine regex patterns, layout models, and thresholds over time.\n\nBy enforcing completeness-aware confidence scoring, non-null precedence in merging, heuristic fallback parsing for UNKNOWN layouts, and targeted re-extraction when validation flags nulls, future bank statement extractions will be far less likely to produce nearly empty JSON outputs and will better populate statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, and mailing_address.",
+                "confidence_level": 0.86
+            }
+        }
+    },
+    {
+        "id": "E2",
+        "created_at_utc": "2026-08-14T06:56:17.898658+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Mandatory field completeness check for confidence assignment",
+                    "description": "Never assign high confidence when mandatory fields are missing or null.",
+                    "logic": {
+                        "mandatory_fields": [
+                            "statement_period_start",
+                            "statement_period_end",
+                            "statement_date",
+                            "opening_balance",
+                            "closing_balance",
+                            "customer_name",
+                            "mailing_address"
+                        ],
+                        "rule": "If count_of_null(mandatory_fields) > 0, then confidence_level <= 0.4; if count_of_null(mandatory_fields) == len(mandatory_fields), then confidence_level <= 0.1 and mark extraction_status = 'catastrophic_failure'."
+                    }
+                },
+                {
+                    "name": "Catastrophic extraction failure detection",
+                    "description": "Detect when the extraction is effectively empty and flag it distinctly.",
+                    "logic": {
+                        "conditions": [
+                            "statement_period_start == null",
+                            "statement_period_end == null",
+                            "statement_date == null",
+                            "opening_balance == null",
+                            "closing_balance == null",
+                            "customer_name == null",
+                            "mailing_address == null",
+                            "transactions.length == 0"
+                        ],
+                        "rule": "If all conditions are true, set extraction_status = 'catastrophic_failure', confidence_level <= 0.1, and trigger a re-processing or manual review workflow instead of returning a normal merged result."
+                    }
+                },
+                {
+                    "name": "Header-based statement period and date extraction",
+                    "description": "Use robust pattern matching on typical bank statement headers to extract statement_period_start, statement_period_end, and statement_date.",
+                    "logic": {
+                        "patterns": [
+                            "Statement Period: {start_date} to {end_date}",
+                            "Period: {start_date} - {end_date}",
+                            "From {start_date} Through {end_date}",
+                            "Statement Date: {statement_date}",
+                            "As of {statement_date}"
+                        ],
+                        "rule": "Scan the first 1–2 pages for header lines containing 'Statement Period', 'Period', 'From', 'Through', 'Statement Date', or 'As of'. Apply date parsers to any date-like tokens (MM/DD/YYYY, DD MMM YYYY, YYYY-MM-DD, etc.). If multiple candidates are found, prefer the one closest to the document title or bank logo. Populate statement_period_start, statement_period_end, and statement_date from these matches before falling back to null."
+                    }
+                },
+                {
+                    "name": "Customer name and mailing address extraction from top-left block",
+                    "description": "Use layout and common label cues to extract customer_name and mailing_address.",
+                    "logic": {
+                        "layout_heuristics": [
+                            "Look for a text block in the top-left quadrant of page 1 that is not the bank name/logo and contains multiple lines.",
+                            "Within that block, identify the first line as candidate customer_name if it contains alphabetic characters and no typical address markers (street suffixes, city/state patterns).",
+                            "Subsequent lines that contain street names, unit numbers, city/state/ZIP patterns should be concatenated into mailing_address."
+                        ],
+                        "label_patterns": [
+                            "Account Holder:",
+                            "Customer:",
+                            "Name:",
+                            "Mailing Address:",
+                            "Address:"
+                        ],
+                        "rule": "First, search for explicit labels (e.g., 'Account Holder:', 'Mailing Address:') and capture the following lines as name/address. If labels are not found, use the top-left block heuristic. Normalize whitespace and line breaks, and ensure mailing_address contains at least one street/city/ZIP pattern before accepting it."
+                    }
+                },
+                {
+                    "name": "Opening and closing balance extraction from summary section",
+                    "description": "Extract opening_balance and closing_balance from the account summary or balance table using numeric and label patterns.",
+                    "logic": {
+                        "label_patterns": [
+                            "Beginning Balance",
+                            "Opening Balance",
+                            "Balance on {statement_period_start}",
+                            "Ending Balance",
+                            "Closing Balance",
+                            "Balance on {statement_period_end}"
+                        ],
+                        "numeric_patterns": [
+                            "currency formats like $1,234.56, 1,234.56, -$123.45"
+                        ],
+                        "rule": "Scan summary sections and tables on page 1 for rows containing the above labels. Associate the nearest currency-formatted number in the same row or column with the corresponding field. If multiple candidates exist, prefer the one in the main account summary table (often near 'Account Summary' or 'Statement Summary'). Populate opening_balance and closing_balance accordingly."
+                    }
+                },
+                {
+                    "name": "Transactions presence sanity check",
+                    "description": "Ensure that transaction_count and transactions are consistent with the presence of balances and statement period.",
+                    "logic": {
+                        "rule": "If statement_period_start and statement_period_end are successfully extracted and the document contains any transaction-like rows (date + description + amount), transaction_count must be > 0 and transactions must not be an empty list. If no transaction rows are detected, but balances exist, set transaction_count = 0 explicitly and lower confidence_level to reflect limited extraction."
+                    }
+                },
+                {
+                    "name": "Cross-field consistency validation",
+                    "description": "Validate that extracted dates and balances are internally consistent.",
+                    "logic": {
+                        "rules": [
+                            "statement_period_start <= statement_period_end; if violated, swap or re-parse dates.",
+                            "statement_date should fall on or after statement_period_end; if not, re-check header parsing.",
+                            "If both opening_balance and closing_balance are present and transactions are available, verify that opening_balance + sum(transactions) ≈ closing_balance within a small tolerance; if not, lower confidence_level or flag for review."
+                        ]
+                    }
+                },
+                {
+                    "name": "Fallback and partial extraction strategy",
+                    "description": "Avoid returning fully null extractions; attempt partial extraction and clearly mark missing fields.",
+                    "logic": {
+                        "rule": "If primary extraction fails for a field, attempt secondary strategies: (1) regex-based search across all pages; (2) layout-based heuristics; (3) dictionary of common bank-specific templates if bank_name is known. Only set a field to null after all strategies fail. For partially extracted statements (some fields present, some null), return the available fields, mark missing ones as null, and adjust confidence_level proportionally to the fraction of successfully extracted mandatory fields."
+                    }
+                }
+            ]
+        },
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "extra": {
+            "errors": [
+                {
+                    "field": "statement_period_start",
+                    "message": "statement_period_start is null"
+                },
+                {
+                    "field": "statement_period_end",
+                    "message": "statement_period_end is null"
+                },
+                {
+                    "field": "statement_date",
+                    "message": "statement_date is null"
+                },
+                {
+                    "field": "opening_balance",
+                    "message": "opening_balance is null"
+                },
+                {
+                    "field": "customer_name",
+                    "message": "customer_name should not be empty or null"
+                },
+                {
+                    "field": "mailing_address",
+                    "message": "mailing_address should not be empty or null"
+                }
+            ],
+            "reflection": {
+                "mistake_description": "The merged extraction is effectively empty: all key fields (statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address) are null, and transactions are an empty list, yet the confidence_level is set to 1.0. This indicates a systemic failure in either parsing the source document or in the merging logic, not just isolated field-level errors. The extractor did not attempt partial inference or fallback strategies (e.g., using layout cues, common header patterns, or cross-page search) to populate mandatory fields. Additionally, the validation did not enforce consistency between data completeness and confidence_level: a fully null extraction should never be marked as high confidence. There is also no evidence of error categorization (e.g., distinguishing between 'document unreadable', 'fields not found', or 'parser failure'), which would help downstream systems handle such cases differently. Overall, the main issues are: (1) lack of robust field-detection strategies for core statement metadata and customer info; (2) absence of fallback/heuristic extraction when primary methods fail; (3) missing rule that ties confidence_level to actual data completeness; and (4) no explicit handling of catastrophic extraction failures (all-null outputs) as a special error state.",
+                "corrected_extraction": {
+                    "rules": [
+                        {
+                            "name": "Mandatory field completeness check for confidence assignment",
+                            "description": "Never assign high confidence when mandatory fields are missing or null.",
+                            "logic": {
+                                "mandatory_fields": [
+                                    "statement_period_start",
+                                    "statement_period_end",
+                                    "statement_date",
+                                    "opening_balance",
+                                    "closing_balance",
+                                    "customer_name",
+                                    "mailing_address"
+                                ],
+                                "rule": "If count_of_null(mandatory_fields) > 0, then confidence_level <= 0.4; if count_of_null(mandatory_fields) == len(mandatory_fields), then confidence_level <= 0.1 and mark extraction_status = 'catastrophic_failure'."
+                            }
+                        },
+                        {
+                            "name": "Catastrophic extraction failure detection",
+                            "description": "Detect when the extraction is effectively empty and flag it distinctly.",
+                            "logic": {
+                                "conditions": [
+                                    "statement_period_start == null",
+                                    "statement_period_end == null",
+                                    "statement_date == null",
+                                    "opening_balance == null",
+                                    "closing_balance == null",
+                                    "customer_name == null",
+                                    "mailing_address == null",
+                                    "transactions.length == 0"
+                                ],
+                                "rule": "If all conditions are true, set extraction_status = 'catastrophic_failure', confidence_level <= 0.1, and trigger a re-processing or manual review workflow instead of returning a normal merged result."
+                            }
+                        },
+                        {
+                            "name": "Header-based statement period and date extraction",
+                            "description": "Use robust pattern matching on typical bank statement headers to extract statement_period_start, statement_period_end, and statement_date.",
+                            "logic": {
+                                "patterns": [
+                                    "Statement Period: {start_date} to {end_date}",
+                                    "Period: {start_date} - {end_date}",
+                                    "From {start_date} Through {end_date}",
+                                    "Statement Date: {statement_date}",
+                                    "As of {statement_date}"
+                                ],
+                                "rule": "Scan the first 1–2 pages for header lines containing 'Statement Period', 'Period', 'From', 'Through', 'Statement Date', or 'As of'. Apply date parsers to any date-like tokens (MM/DD/YYYY, DD MMM YYYY, YYYY-MM-DD, etc.). If multiple candidates are found, prefer the one closest to the document title or bank logo. Populate statement_period_start, statement_period_end, and statement_date from these matches before falling back to null."
+                            }
+                        },
+                        {
+                            "name": "Customer name and mailing address extraction from top-left block",
+                            "description": "Use layout and common label cues to extract customer_name and mailing_address.",
+                            "logic": {
+                                "layout_heuristics": [
+                                    "Look for a text block in the top-left quadrant of page 1 that is not the bank name/logo and contains multiple lines.",
+                                    "Within that block, identify the first line as candidate customer_name if it contains alphabetic characters and no typical address markers (street suffixes, city/state patterns).",
+                                    "Subsequent lines that contain street names, unit numbers, city/state/ZIP patterns should be concatenated into mailing_address."
+                                ],
+                                "label_patterns": [
+                                    "Account Holder:",
+                                    "Customer:",
+                                    "Name:",
+                                    "Mailing Address:",
+                                    "Address:"
+                                ],
+                                "rule": "First, search for explicit labels (e.g., 'Account Holder:', 'Mailing Address:') and capture the following lines as name/address. If labels are not found, use the top-left block heuristic. Normalize whitespace and line breaks, and ensure mailing_address contains at least one street/city/ZIP pattern before accepting it."
+                            }
+                        },
+                        {
+                            "name": "Opening and closing balance extraction from summary section",
+                            "description": "Extract opening_balance and closing_balance from the account summary or balance table using numeric and label patterns.",
+                            "logic": {
+                                "label_patterns": [
+                                    "Beginning Balance",
+                                    "Opening Balance",
+                                    "Balance on {statement_period_start}",
+                                    "Ending Balance",
+                                    "Closing Balance",
+                                    "Balance on {statement_period_end}"
+                                ],
+                                "numeric_patterns": [
+                                    "currency formats like $1,234.56, 1,234.56, -$123.45"
+                                ],
+                                "rule": "Scan summary sections and tables on page 1 for rows containing the above labels. Associate the nearest currency-formatted number in the same row or column with the corresponding field. If multiple candidates exist, prefer the one in the main account summary table (often near 'Account Summary' or 'Statement Summary'). Populate opening_balance and closing_balance accordingly."
+                            }
+                        },
+                        {
+                            "name": "Transactions presence sanity check",
+                            "description": "Ensure that transaction_count and transactions are consistent with the presence of balances and statement period.",
+                            "logic": {
+                                "rule": "If statement_period_start and statement_period_end are successfully extracted and the document contains any transaction-like rows (date + description + amount), transaction_count must be > 0 and transactions must not be an empty list. If no transaction rows are detected, but balances exist, set transaction_count = 0 explicitly and lower confidence_level to reflect limited extraction."
+                            }
+                        },
+                        {
+                            "name": "Cross-field consistency validation",
+                            "description": "Validate that extracted dates and balances are internally consistent.",
+                            "logic": {
+                                "rules": [
+                                    "statement_period_start <= statement_period_end; if violated, swap or re-parse dates.",
+                                    "statement_date should fall on or after statement_period_end; if not, re-check header parsing.",
+                                    "If both opening_balance and closing_balance are present and transactions are available, verify that opening_balance + sum(transactions) ≈ closing_balance within a small tolerance; if not, lower confidence_level or flag for review."
+                                ]
+                            }
+                        },
+                        {
+                            "name": "Fallback and partial extraction strategy",
+                            "description": "Avoid returning fully null extractions; attempt partial extraction and clearly mark missing fields.",
+                            "logic": {
+                                "rule": "If primary extraction fails for a field, attempt secondary strategies: (1) regex-based search across all pages; (2) layout-based heuristics; (3) dictionary of common bank-specific templates if bank_name is known. Only set a field to null after all strategies fail. For partially extracted statements (some fields present, some null), return the available fields, mark missing ones as null, and adjust confidence_level proportionally to the fraction of successfully extracted mandatory fields."
+                            }
+                        }
+                    ]
+                },
+                "confidence_level": 0.86
+            }
+        }
+    },
+    {
+        "id": "E3",
+        "created_at_utc": "2026-08-14T15:43:53.481754+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Required core fields must not be null in final output",
+                    "description": "Before finalizing any bank statement extraction, validate that core fields are non-null: statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, bank_name, account_number. If any of these remain null after extraction and merging, mark the extraction as incomplete and lower confidence_level accordingly (e.g., below 0.5), or flag the document for manual review instead of returning a high-confidence result.",
+                    "applies_to_fields": [
+                        "statement_period_start",
+                        "statement_period_end",
+                        "statement_date",
+                        "opening_balance",
+                        "closing_balance",
+                        "customer_name",
+                        "mailing_address",
+                        "bank_name",
+                        "account_number"
+                    ]
+                },
+                {
+                    "name": "Auto-derive transaction_count from transactions array",
+                    "description": "Always set transaction_count to the length of the transactions array when generating the final merged JSON. If transactions is null, initialize it as an empty array and set transaction_count to 0. Never leave transaction_count as null in the final output.",
+                    "applies_to_fields": [
+                        "transactions",
+                        "transaction_count"
+                    ]
+                },
+                {
+                    "name": "Confidence score alignment with data completeness",
+                    "description": "Implement a rule-based adjustment of confidence_level based on the presence of critical fields. For example, if more than 30% of required core fields are null, cap confidence_level at a low value (e.g., <= 0.3). If all required core fields are present and validated, allow higher confidence. This prevents cases where an almost-empty extraction is labeled with confidence_level = 1.0.",
+                    "applies_to_fields": [
+                        "confidence_level",
+                        "statement_period_start",
+                        "statement_period_end",
+                        "statement_date",
+                        "opening_balance",
+                        "closing_balance",
+                        "customer_name",
+                        "mailing_address",
+                        "bank_name",
+                        "account_number"
+                    ]
+                },
+                {
+                    "name": "Merge logic should not overwrite valid values with null",
+                    "description": "During the MERGED_EXTRACTION step, when combining outputs from multiple extractors or pages, never overwrite a non-null, validated field value with a null or empty value from another source. Use a precedence rule: prefer non-null, higher-confidence values; only replace a value if the new candidate is non-null and has equal or higher confidence. This prevents previously extracted data from being erased and replaced with nulls.",
+                    "applies_to_fields": [
+                        "ALL_FIELDS"
+                    ]
+                },
+                {
+                    "name": "Explicit failure state for unparsed or unreadable documents",
+                    "description": "If the parser cannot detect any of the key structural elements of a bank statement (e.g., no dates, no balances, no customer name, no transactions), return an explicit failure or 'unparsed_document' status instead of an apparently valid but empty MERGED_EXTRACTION. This status should trigger manual review and set confidence_level to a very low value (e.g., <= 0.1).",
+                    "applies_to_fields": [
+                        "confidence_level",
+                        "statement_period_start",
+                        "statement_period_end",
+                        "statement_date",
+                        "opening_balance",
+                        "closing_balance",
+                        "customer_name",
+                        "mailing_address",
+                        "transactions"
+                    ]
+                },
+                {
+                    "name": "Basic format validation for date and balance fields",
+                    "description": "For fields like statement_period_start, statement_period_end, statement_date, opening_balance, and closing_balance, enforce format checks (e.g., valid date formats, numeric currency formats). If the system fails to find any candidate values that pass these checks, mark the field as missing and reduce confidence_level rather than silently leaving them null with high confidence.",
+                    "applies_to_fields": [
+                        "statement_period_start",
+                        "statement_period_end",
+                        "statement_date",
+                        "opening_balance",
+                        "closing_balance"
+                    ]
+                },
+                {
+                    "name": "Non-empty identity fields for customer and account",
+                    "description": "Customer identity fields (customer_name, mailing_address, account_number) must be non-empty strings in the final output. If extraction yields only whitespace or empty strings, treat them as null and trigger the required-fields validation rule, lowering confidence and/or flagging for review.",
+                    "applies_to_fields": [
+                        "customer_name",
+                        "mailing_address",
+                        "account_number"
+                    ]
+                }
+            ]
+        },
+        "confidence": 0.92,
+        "source": "reflection",
+        "human_feedback": false,
+        "extra": {
+            "errors": [
+                {
+                    "field": "statement_period_start",
+                    "message": "statement_period_start is null"
+                },
+                {
+                    "field": "statement_period_end",
+                    "message": "statement_period_end is null"
+                },
+                {
+                    "field": "statement_date",
+                    "message": "statement_date is null"
+                },
+                {
+                    "field": "opening_balance",
+                    "message": "opening_balance is null and cannot be validated against previous closing_balance"
+                },
+                {
+                    "field": "customer_name",
+                    "message": "customer_name should not be empty or null"
+                },
+                {
+                    "field": "mailing_address",
+                    "message": "mailing_address should not be empty or null"
+                },
+                {
+                    "field": "transaction_count",
+                    "message": "transaction_count is null but should equal the number of transactions in the transactions array (0)"
+                }
+            ],
+            "reflection": {
+                "mistake_description": "The merged extraction is effectively empty while still reporting a confidence_level of 1.0, indicating a severe mismatch between extraction content and confidence scoring. All key metadata fields (statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address, transaction_count) are null or empty, and the transactions array is present but contains no items. This suggests that either the source document was not parsed at all, parsing failed silently, or the merger logic overwrote previously extracted values with nulls. Additionally, transaction_count is left null even though it can be deterministically derived from the length of the transactions array (0). The system also fails to enforce basic non-null constraints for core identity and period fields before finalizing the merged result. Overall, the extraction pipeline is missing validation gates that (1) prevent high confidence scores when critical fields are missing, (2) auto-populate computable fields like transaction_count, and (3) ensure that required fields such as customer_name and mailing_address are present or explicitly flagged as extraction failures rather than silently set to null.",
+                "corrected_extraction": {
+                    "rules": [
+                        {
+                            "name": "Required core fields must not be null in final output",
+                            "description": "Before finalizing any bank statement extraction, validate that core fields are non-null: statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, bank_name, account_number. If any of these remain null after extraction and merging, mark the extraction as incomplete and lower confidence_level accordingly (e.g., below 0.5), or flag the document for manual review instead of returning a high-confidence result.",
+                            "applies_to_fields": [
+                                "statement_period_start",
+                                "statement_period_end",
+                                "statement_date",
+                                "opening_balance",
+                                "closing_balance",
+                                "customer_name",
+                                "mailing_address",
+                                "bank_name",
+                                "account_number"
+                            ]
+                        },
+                        {
+                            "name": "Auto-derive transaction_count from transactions array",
+                            "description": "Always set transaction_count to the length of the transactions array when generating the final merged JSON. If transactions is null, initialize it as an empty array and set transaction_count to 0. Never leave transaction_count as null in the final output.",
+                            "applies_to_fields": [
+                                "transactions",
+                                "transaction_count"
+                            ]
+                        },
+                        {
+                            "name": "Confidence score alignment with data completeness",
+                            "description": "Implement a rule-based adjustment of confidence_level based on the presence of critical fields. For example, if more than 30% of required core fields are null, cap confidence_level at a low value (e.g., <= 0.3). If all required core fields are present and validated, allow higher confidence. This prevents cases where an almost-empty extraction is labeled with confidence_level = 1.0.",
+                            "applies_to_fields": [
+                                "confidence_level",
+                                "statement_period_start",
+                                "statement_period_end",
+                                "statement_date",
+                                "opening_balance",
+                                "closing_balance",
+                                "customer_name",
+                                "mailing_address",
+                                "bank_name",
+                                "account_number"
+                            ]
+                        },
+                        {
+                            "name": "Merge logic should not overwrite valid values with null",
+                            "description": "During the MERGED_EXTRACTION step, when combining outputs from multiple extractors or pages, never overwrite a non-null, validated field value with a null or empty value from another source. Use a precedence rule: prefer non-null, higher-confidence values; only replace a value if the new candidate is non-null and has equal or higher confidence. This prevents previously extracted data from being erased and replaced with nulls.",
+                            "applies_to_fields": [
+                                "ALL_FIELDS"
+                            ]
+                        },
+                        {
+                            "name": "Explicit failure state for unparsed or unreadable documents",
+                            "description": "If the parser cannot detect any of the key structural elements of a bank statement (e.g., no dates, no balances, no customer name, no transactions), return an explicit failure or 'unparsed_document' status instead of an apparently valid but empty MERGED_EXTRACTION. This status should trigger manual review and set confidence_level to a very low value (e.g., <= 0.1).",
+                            "applies_to_fields": [
+                                "confidence_level",
+                                "statement_period_start",
+                                "statement_period_end",
+                                "statement_date",
+                                "opening_balance",
+                                "closing_balance",
+                                "customer_name",
+                                "mailing_address",
+                                "transactions"
+                            ]
+                        },
+                        {
+                            "name": "Basic format validation for date and balance fields",
+                            "description": "For fields like statement_period_start, statement_period_end, statement_date, opening_balance, and closing_balance, enforce format checks (e.g., valid date formats, numeric currency formats). If the system fails to find any candidate values that pass these checks, mark the field as missing and reduce confidence_level rather than silently leaving them null with high confidence.",
+                            "applies_to_fields": [
+                                "statement_period_start",
+                                "statement_period_end",
+                                "statement_date",
+                                "opening_balance",
+                                "closing_balance"
+                            ]
+                        },
+                        {
+                            "name": "Non-empty identity fields for customer and account",
+                            "description": "Customer identity fields (customer_name, mailing_address, account_number) must be non-empty strings in the final output. If extraction yields only whitespace or empty strings, treat them as null and trigger the required-fields validation rule, lowering confidence and/or flagging for review.",
+                            "applies_to_fields": [
+                                "customer_name",
+                                "mailing_address",
+                                "account_number"
+                            ]
+                        }
+                    ]
+                },
+                "confidence_level": 0.92
+            }
+        }
+    },
+    {
+        "id": "E4",
+        "created_at_utc": "2026-08-14T18:40:36.234038+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Mandatory-field completeness rule: For bank statements, treat the following fields as required for a valid extraction: bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address. If more than a small threshold (e.g., one) of these mandatory fields are null or empty, the extraction should be flagged as failed or incomplete rather than returned as a normal result.\n\n2) Confidence adjustment rule: Confidence_level must be derived from field-level detection success. If any mandatory field is null or empty, reduce the global confidence significantly (e.g., below 0.5). If most mandatory fields are missing, set confidence_level near 0.0 and mark the extraction as unusable. Never assign confidence_level = 1.0 when any required field is missing.\n\n3) Transaction consistency rule: Always compute transaction_count from the transactions array length when possible. If transaction_count is null but transactions are present, set transaction_count = len(transactions). If both transaction_count and transactions are empty or null, mark the statement as having no detectable transactions and lower confidence, especially if the document type normally contains transactions.\n\n4) Structural validation rule: After merging extractions, run a validation pass that checks: (a) presence of mandatory fields, (b) non-empty customer_name and mailing_address strings, and (c) logical consistency between balances and transactions when available. If this validation fails, do not output a fully-populated JSON with high confidence; instead, return an error state or a clearly marked partial extraction.\n\n5) Fallback handling rule: If the source document cannot be parsed or text cannot be extracted (e.g., corrupted file, unsupported format), do not emit a default object with nulls and high confidence. Instead, emit a structured error indicating that extraction was not possible, and set confidence_level to 0.0.\n\n6) Period/date inference rule (when content exists): If statement_period_start and statement_period_end are missing but a statement_date or other date markers are present, attempt to infer the period from nearby text patterns (e.g., \"For period 01/01/2024 - 01/31/2024\"). If no dates can be found at all, treat this as a critical failure for a bank statement and lower confidence accordingly.\n\nThese rules should be applied generically to future bank statement extractions to prevent returning empty or nearly empty objects as high-confidence results and to enforce basic completeness and consistency checks before finalizing the merged JSON.",
+        "confidence": 0.93,
+        "source": "reflection",
+        "human_feedback": false
+    },
+    {
+        "id": "E5",
+        "created_at_utc": "2026-08-14T18:43:39.142585+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1. Mandatory-field completeness rule: For bank statements, treat the following fields as mandatory: bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address. If more than a small threshold (e.g., >30%) of mandatory fields are null or empty, the extraction should be flagged as failed and confidence_level must be set to a low value (e.g., <=0.2), rather than defaulting to a high confidence.\n2. Transactions and transaction_count consistency rule: Always derive transaction_count from the length of the transactions array when possible. If transaction_count is null but transactions is a non-empty array, set transaction_count = transactions.length. If both transaction_count and transactions are empty or null, explicitly mark the statement as having no transactions and reduce confidence_level unless the source document clearly indicates zero activity.\n3. Confidence-level calibration rule: Confidence_level must be a function of both field-level extraction certainty and overall document completeness. Implement a scoring mechanism where missing mandatory fields, empty transactions when the document appears to contain activity, or unresolved key identifiers (customer_name, account_number) significantly reduce the confidence score. Never assign confidence_level >0.8 when any of the core identifiers (customer_name, account_number, bank_name) are null.\n4. Document detection and fallback rule: Before extraction, run a lightweight document-type detection step. If the document is detected as a bank statement but the extraction yields mostly null fields, trigger a fallback: re-run OCR/parsing with more permissive settings, attempt alternative layout templates, or flag the document for manual review. Do not output a fully null structure with high confidence.\n5. Cross-field validation rule: Implement validation checks that compare related fields for logical consistency. Examples: (a) statement_period_start and statement_period_end must both be present and in chronological order; if one is missing, attempt to infer from nearby text or mark extraction as incomplete. (b) opening_balance and closing_balance should be present and numeric; if both are missing, lower confidence and flag the statement as incomplete. (c) If statement_date is missing but a clear period range exists, attempt to infer statement_date from the document header or period end; otherwise mark as unknown and reduce confidence.\n6. Null-handling and default behavior rule: Avoid silently defaulting fields to null without logging or internal flags indicating why the value is missing (e.g., not found, low OCR quality, ambiguous match). Use these internal flags to drive confidence_level and to decide whether to attempt secondary extraction strategies.\n7. Customer identity extraction rule: For customer_name and mailing_address, enforce specialized patterns: look for typical header blocks (name + address lines) and common bank statement layout regions. If these fields are not found in expected regions, expand the search to the entire document before leaving them null. If still not found, explicitly mark them as \"unknown\" rather than assuming successful extraction.\nBy applying these generalized rules, future extractions will better detect when a statement has been poorly parsed, avoid misleading high confidence scores, and enforce consistency between related fields such as transaction_count and transactions.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E6",
+        "created_at_utc": "2026-08-14T18:52:43.978827+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Critical field presence and confidence adjustment",
+                    "description": "When extracting bank statements, treat certain fields as critical: statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, and transaction_count. If any of these critical fields are null or empty after extraction, automatically lower the overall confidence_level to reflect uncertainty (e.g., cap confidence_level at 0.3 or less). If most or all critical fields are missing, flag the extraction as a failure and require re-processing (e.g., re-run OCR, use alternative templates, or manual review) instead of returning a high-confidence, mostly empty JSON.",
+                    "implementation_hint": "After merging extractions, run a validation pass that counts missing critical fields. If more than a threshold (e.g., 2) are missing, adjust confidence_level downward and mark the record for re-check."
+                },
+                {
+                    "name": "Transaction count synchronization",
+                    "description": "Always derive transaction_count from the length of the transactions array. Never leave transaction_count null if the transactions array is present. If transactions is an array, set transaction_count = transactions.length. If transactions is missing or not an array, set transactions = [] and transaction_count = 0. This ensures transaction_count is consistent with the actual transaction data and prevents mismatches.",
+                    "implementation_hint": "At the end of extraction, run: if Array.isArray(transactions) then transaction_count = transactions.length else { transactions = []; transaction_count = 0; }."
+                },
+                {
+                    "name": "Minimum viable statement check",
+                    "description": "Define a minimum set of fields that must be non-null for a bank statement to be considered valid: at least one of (statement_period_start, statement_period_end, statement_date), plus customer_name, mailing_address, and either opening_balance or closing_balance. If these minimum fields are not present, do not treat the extraction as successful. Instead, mark the extraction as incomplete and trigger a fallback extraction strategy or manual review.",
+                    "implementation_hint": "Create a validator that checks these minimum fields. If validation fails, set a status flag (e.g., extraction_status = 'incomplete') and avoid returning confidence_level > 0.5."
+                },
+                {
+                    "name": "Fallback parsing for dates and balances",
+                    "description": "When primary template-based extraction fails to find statement_period_start, statement_period_end, or statement_date, apply generic pattern-based parsing across the entire document. Look for common date patterns (e.g., MM/DD/YYYY, DD MMM YYYY) near keywords like 'Statement Period', 'From', 'To', 'Statement Date'. Similarly, for opening_balance and closing_balance, search near phrases like 'Beginning Balance', 'Opening Balance', 'Ending Balance', 'Closing Balance'. This reduces the chance of returning null for these fields when the layout differs from expected templates.",
+                    "implementation_hint": "Implement regex-based search over the raw text for date and currency patterns anchored by nearby keywords, and use these as fallback values when template extraction returns null."
+                },
+                {
+                    "name": "Customer name and mailing address robustness",
+                    "description": "Do not leave customer_name or mailing_address null without attempting multiple extraction strategies. If template-based extraction fails, search the top portion of the document for name/address blocks (often near the bank logo or 'Account Summary'). Use heuristics: lines with person or company names followed by one or more lines containing street, city, state, and ZIP patterns. If still not found, explicitly mark these fields as 'unknown' rather than null, and lower confidence_level accordingly.",
+                    "implementation_hint": "Implement a secondary pass that scans the first N lines of the document for address patterns (e.g., '\\d+\\s+\\w+\\s+(St|Street|Ave|Avenue|Rd|Road)' and city/state/ZIP formats) and associates them with the nearest preceding name-like line."
+                },
+                {
+                    "name": "Null field prevention in final output",
+                    "description": "Before returning the final merged JSON, run a normalization step that replaces unexpected nulls with safe defaults where appropriate and flags truly missing critical data. For example, if transactions is null, set it to []; if transaction_count is null but transactions exists, set it to transactions.length. For critical fields that cannot be defaulted (e.g., customer_name, statement_period_start), keep them null but attach an internal error or status indicating missing data, and ensure confidence_level reflects this.",
+                    "implementation_hint": "Create a post-processing function that normalizes arrays and counts, and separately logs missing critical fields for downstream validation."
+                },
+                {
+                    "name": "Template mismatch and OCR failure detection",
+                    "description": "If an extraction run produces almost entirely null fields (e.g., more than 80% of expected fields are null) and transactions is empty, treat this as a likely template mismatch or OCR failure rather than a valid 'no data' statement. In such cases, do not assign high confidence. Instead, trigger a diagnostic step: check whether text was successfully extracted, whether the bank_name or any recognizable keywords are present, and if not, re-run OCR or apply a different parsing strategy.",
+                    "implementation_hint": "Add a heuristic: if (nonNullFieldCount / totalFieldCount) < 0.2 then set confidence_level <= 0.2 and mark extraction_status = 'suspected_failure'."
+                }
+            ]
+        },
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E7",
+        "created_at_utc": "2026-08-14T18:59:46.660377+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Mandatory-field completeness rule: For bank statements, treat the following fields as required unless explicitly known to be absent in the source: bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, transaction_count. If any of these are null or empty after extraction, the merged result must not be considered complete; instead, either (a) mark the entire extraction as low confidence (<= 0.3) or (b) flag the extraction as failed and require re-processing or human review.\n\n2) Confidence adjustment rule: Confidence_level must be dynamically reduced based on missing mandatory fields and validation errors. For example, if more than 20% of mandatory fields are missing, cap confidence_level at 0.5; if more than 50% are missing, cap confidence_level at 0.2. Never assign confidence_level >= 0.9 when any required field is null.\n\n3) Transaction count consistency rule: Always set transaction_count to the length of the transactions array when the source does not explicitly provide a transaction count. If the source provides a transaction count, validate it against the extracted transactions; if they differ, flag a validation error and lower confidence_level. Never leave transaction_count as null when transactions is present (even if empty, set transaction_count = 0).\n\n4) Upstream error propagation rule: If the extraction engine fails to detect any recognizable statement structure (e.g., no dates, no balances, no customer identity), propagate an explicit failure status to the merger instead of defaulting to nulls. The merger should then either (a) output a clearly marked failed extraction with very low confidence, or (b) request re-extraction with adjusted parsing strategies.\n\n5) Customer identity and address rule: Implement targeted heuristics and pattern recognition to locate customer_name and mailing_address (e.g., look for blocks near the top of the statement, near labels like \"Account Statement\", or near account details). If these cannot be found, mark the extraction as incomplete and reduce confidence_level significantly. Do not treat missing customer_name or mailing_address as acceptable for a standard bank statement.\n\n6) Date extraction rule: Use robust date detection for statement_period_start, statement_period_end, and statement_date by scanning for common patterns (MM/DD/YYYY, DD/MM/YYYY, Month YYYY, etc.) near phrases like \"Statement Period\", \"From\", \"To\", \"Statement Date\". If no such dates are found, flag the extraction as incomplete and lower confidence_level; do not leave all date fields null without a corresponding confidence penalty.\n\n7) Validation-before-finalization rule: Before finalizing merged_extractions, run a validation pass that checks: (a) required fields are non-null, (b) transaction_count equals the number of transactions, and (c) key numeric fields (opening_balance, closing_balance) are present and parsable. If validation fails, adjust confidence_level downward and attach error flags rather than outputting a seemingly complete, high-confidence JSON with nulls.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E8",
+        "created_at_utc": "2026-08-18T07:05:40.641355+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "Implement the following generalized rules for future bank statement extractions:\n\n1. Mandatory Field Presence & Confidence Rule:\n   - Define a set of mandatory fields for bank statements: [statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address].\n   - Before finalizing the merged extraction, run a validation step:\n     - If any mandatory field is null or empty, mark the extraction as incomplete.\n     - Incomplete extractions must not be assigned a confidence_level > 0.5.\n     - If more than 50% of mandatory fields are missing, set confidence_level <= 0.2 and flag the record as a probable extraction failure.\n\n2. Default Confidence Guardrail:\n   - Disallow hard-coded or default confidence_level values (e.g., 1.0) when the extraction engine returns mostly null or empty fields.\n   - Confidence_level must be derived from:\n     - The proportion of mandatory fields successfully populated.\n     - The OCR/parsing quality metrics (if available).\n   - Example heuristic:\n     - base_confidence = (#mandatory_fields_populated / #mandatory_fields_total)\n     - final_confidence = min(base_confidence, engine_confidence_metric)\n\n3. Null-Only Output Detection:\n   - Add a rule that detects when the merged extraction is effectively empty:\n     - Condition: all of [bank_name, account_number, routing_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address] are null or empty AND transactions list is empty.\n     - If this condition is true:\n       - Treat the extraction as a hard failure.\n       - Set confidence_level to 0.0–0.1.\n       - Optionally trigger a re-run with alternative OCR/parse strategies or escalate for manual review.\n\n4. Pre-Merge Parser Failure Propagation:\n   - If any upstream component (OCR, layout detection, parser) reports an error or extremely low confidence, propagate this status to the merged result instead of silently returning an empty structure.\n   - In such cases:\n     - Do not attempt to infer or fabricate values.\n     - Explicitly mark all unknown fields as null and set confidence_level <= 0.2.\n\n5. Customer Name & Address Extraction Rule:\n   - When customer_name or mailing_address are missing:\n     - Attempt targeted extraction from typical header regions (top-left/top-right) where names and addresses usually appear.\n     - Use pattern-based heuristics:\n       - customer_name: often appears as a line with alphabetic characters, possibly with capitalization, above or near the address block.\n       - mailing_address: multi-line block containing street, city, state, postal code.\n     - If these heuristics fail, do not default to high confidence; instead, lower confidence_level and flag the missing fields.\n\n6. Date & Balance Consistency Rule:\n   - For statement_period_start, statement_period_end, and statement_date:\n     - Enforce date format normalization (e.g., YYYY-MM-DD) after parsing.\n     - If no date-like patterns are detected in the document, mark all date fields as null and reduce confidence_level significantly.\n   - For opening_balance and closing_balance:\n     - Require detection of at least one balance-related label (e.g., \"Opening Balance\", \"Beginning Balance\", \"Closing Balance\", \"Ending Balance\").\n     - If such labels are not found or values cannot be parsed, set balances to null and lower confidence_level.\n\n7. Transaction List Sanity Check:\n   - If the document is recognized as a bank statement but the transactions array is empty:\n     - Re-scan the document for tabular structures or repeated date/amount patterns.\n     - If still no transactions are found, treat this as a partial extraction and cap confidence_level (e.g., <= 0.5), even if some header fields are present.\n\n8. Validation-Driven Feedback Loop:\n   - Integrate the validation errors (like those seen here) back into the extraction logic:\n     - When validation reports missing mandatory fields, log the document characteristics (layout, bank type, OCR quality) and adjust parsing rules for similar future documents.\n     - Use these logs to refine pattern libraries for dates, balances, and address blocks.\n\nBy enforcing these rules, future extractions will avoid returning high-confidence, mostly-null JSON outputs. Instead, they will either populate mandatory fields with reasonable confidence or explicitly signal low-confidence/failed extractions, enabling appropriate downstream handling.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E9",
+        "created_at_utc": "2026-08-18T07:16:22.847175+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "Introduce strict completeness and confidence gating rules before finalizing merged extraction output: (1) Required-field rule: For bank statements, enforce that certain core fields must be non-null before considering the extraction successful: bank_name, account_number, statement_period_start, statement_period_end, statement_date, customer_name, and at least one of (opening_balance, closing_balance). If these required fields are missing or null after initial extraction, mark the extraction as FAILED and trigger a retry (e.g., different OCR engine, layout model, or template) or return an explicit failure status instead of a partially empty JSON. (2) Confidence threshold rule: Do not emit a final extraction object if the overall confidence_level is below 0.7. Instead, either (a) attempt alternative extraction strategies (different model, re-segmentation, or re-running on specific pages), or (b) return a structured error indicating low-confidence extraction. Only once confidence_level >= 0.7 should the merged JSON be produced. (3) Transactions consistency rule: If transaction_count is 0, verify that the transactions array is truly empty and that this is consistent with the document (e.g., a statement with no activity). If the statement appears to contain transaction lines (detected via layout/keywords) but the parsed transactions array is empty, treat this as an extraction failure and retry rather than returning an empty list. (4) Identity fields rule: customer_name and mailing_address must not be empty or null for consumer bank statements. If they are missing, attempt targeted extraction from header blocks or address blocks (e.g., search for name/address patterns near bank logo or \"Account Summary\" sections). If still unresolved, mark the extraction as incomplete and do not pass it as a valid result. (5) Period/date validation rule: After extracting statement_period_start, statement_period_end, and statement_date, validate that start <= end and statement_date >= statement_period_end (within a reasonable tolerance). If any of these dates are missing or invalid, classify the extraction as incomplete and re-run date extraction using alternative patterns or page regions. (6) Fallback behavior rule: When the combination of missing required fields and low confidence is detected, the system should not silently produce a default JSON with nulls; instead, it should explicitly signal an extraction failure state to downstream validators, so they do not attempt to validate or rely on incomplete data. These rules should be applied generically to all future bank statement extractions to prevent passing through essentially empty or unusable merged results.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E10",
+        "created_at_utc": "2026-08-18T07:35:40.382453+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Mandatory-field enforcement rule: For bank statements, treat the following fields as mandatory: bank_name, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address. If any of these fields are null after extraction, the extraction pipeline must: (a) attempt secondary extraction strategies (e.g., alternative templates, OCR re-run, different language/date formats, header/footer scanning), and (b) if still null, mark the entire extraction as incomplete and set confidence_level <= 0.3.\n\n2) Confidence consistency rule: Never assign a high confidence_level (e.g., > 0.8) when any mandatory field is null or when transaction_count = 0 for a document classified as a bank statement. Confidence must be computed as a function of field coverage (percentage of mandatory fields populated) and internal consistency checks (e.g., balances, date ranges). If coverage < 70%, cap confidence at 0.5; if coverage < 40%, cap confidence at 0.3.\n\n3) Null-guard rule for header fields: Before finalizing merged extraction, run a null-guard validator that explicitly checks: statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address. If any are null, do not silently pass them through. Instead, either: (a) trigger a re-extraction attempt with relaxed patterns (e.g., broader date regex, alternative header locations), or (b) explicitly flag the record as requiring manual review and annotate which fields are missing.\n\n4) Date extraction fallback rule: If statement_period_start and statement_period_end are not found in the usual header locations, search the entire document for date ranges using multiple formats (e.g., MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD, month names). Prefer ranges that appear near phrases like \"Statement Period\", \"From\", \"To\", \"For the period\", or that appear in header/footer lines. If multiple candidates exist, choose the range that best aligns with transaction dates. If no plausible range is found, leave the fields null but lower confidence and flag the issue.\n\n5) Customer identity extraction rule: For customer_name and mailing_address, use a multi-strategy approach: (a) primary: look for labeled sections (e.g., \"Account Holder\", \"Customer\", \"Mailing Address\"); (b) secondary: detect name/address blocks near the top-left or top-right of the first page; (c) tertiary: if multiple names/addresses are present (e.g., bank vs. customer), prefer the block not containing the bank_name. If no plausible name/address is found, explicitly mark these fields as missing and reduce confidence.\n\n6) Opening/closing balance consistency rule: When opening_balance is null but closing_balance or prior statement data is available, attempt to infer or cross-check: (a) if previous statement closing_balance exists, use it as a candidate opening_balance; (b) validate that inferred opening_balance + sum(transactions) ≈ closing_balance. If inference fails or no prior data exists, keep opening_balance null but mark the extraction as incomplete and lower confidence. Never claim full confidence when opening_balance is missing.\n\n7) Transaction presence sanity rule: For documents classified as bank statements, require at least one transaction or an explicit indication that there were no transactions (e.g., a \"No activity this period\" message). If the document has no such indication and the extracted transactions array is empty, treat this as a likely extraction failure, not a valid empty statement. Trigger re-extraction or manual review and reduce confidence.\n\n8) Merged-extraction override rule: During merging of multiple extraction passes, do not allow a default or placeholder extraction (all nulls, empty transactions) to overwrite a partially successful extraction. Implement a scoring mechanism where extractions with more populated mandatory fields and higher internal consistency are preferred. If the best available extraction still has critical nulls, propagate those nulls but also propagate a low confidence and an explicit error list.\n\n9) Validation feedback integration rule: Integrate validator errors (e.g., \"statement_period_start is null\", \"customer_name should not be empty\") back into the extraction pipeline. When such errors occur, they should automatically trigger: (a) a re-run with alternative templates or OCR settings, and/or (b) a downgrade of confidence and a flag for manual review. Do not finalize the JSON as high-confidence when these errors are present.\n\n10) Logging and monitoring rule: Log every case where mandatory fields are null or transaction_count = 0 along with the document classification and applied templates. Use these logs to refine templates and extraction heuristics (e.g., new header patterns, new address layouts). Over time, update the extraction rules to handle recurring patterns that previously led to null fields.\n\nThese rules should be applied generically to all bank statement extractions to prevent future cases where a structurally valid but semantically empty JSON is produced and incorrectly marked as high-confidence.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E11",
+        "created_at_utc": "2026-08-18T10:35:11.871648+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Introduce mandatory field checks and confidence gating:\n   - Define a minimal required field set for a valid bank statement extraction, e.g.: [statement_period_start OR statement_period_end], statement_date, customer_name, mailing_address, opening_balance, closing_balance.\n   - After merging, if all of these required fields are null or missing, mark the extraction as a failure and set confidence_level to a low value (e.g., <= 0.2) or explicitly flag an extraction_error instead of returning a seemingly valid object.\n   - Rule: If more than N (e.g., 50%) of top-level critical fields are null, do not assign high confidence; trigger fallback or error.\n\n2) Add a structural completeness rule for transactions:\n   - If transaction_count == 0 and transactions.length == 0, treat this as a special case:\n     * If the statement is known to be a transactional account, require at least one transaction or explicitly mark the statement as having no activity (only if the document text supports this, e.g., a \"No transactions this period\" message).\n     * Otherwise, lower confidence and flag for manual review.\n   - Rule: Do not assume correctness when both transaction_count and transactions array are zero without corroborating textual evidence.\n\n3) Enforce template/layout detection and fallback:\n   - Before extraction, detect whether the document layout matches any known templates. If no template matches with sufficient confidence, use a generic extraction strategy (e.g., regex-based header detection for dates, balances, and customer info).\n   - Rule: If template match confidence is below a threshold and generic extraction also fails to populate critical fields, return an explicit \"unrecognized_layout\" status instead of an empty but high-confidence JSON.\n\n4) Implement field-level confidence and aggregation rules:\n   - Track confidence per field (e.g., statement_period_start_confidence, customer_name_confidence). When merging, aggregate these to compute the overall confidence_level.\n   - Rule: Overall confidence_level must be bounded by the lowest confidence among critical fields; if any critical field is null or has confidence below a threshold, cap the global confidence accordingly.\n\n5) Add validation-aware extraction feedback loop:\n   - Integrate validator feedback into extraction: if the validator reports that all period dates, statement_date, and opening_balance are null, treat this as a signal to re-run extraction with alternative strategies (e.g., different OCR settings, language models, or relaxed parsing rules).\n   - Rule: On validation failure due to missing critical fields, attempt at least one re-extraction pass before finalizing the result.\n\n6) Explicit null-handling and error signaling:\n   - Distinguish between \"field not found\" and \"field not applicable\". For bank statements, fields like customer_name and mailing_address should almost never be \"not applicable\"; if they are null, treat this as a strong error signal.\n   - Rule: For fields that are logically mandatory for the document type, null values must either:\n     * trigger a low-confidence extraction flag, or\n     * be accompanied by an explicit reason (e.g., \"field_not_detected\") in a separate metadata structure.\n\n7) Period and date extraction heuristics:\n   - Implement generic heuristics to detect statement periods and dates even when templates fail, such as scanning for patterns like \"Statement Period\", \"From [date] to [date]\", or date ranges near the top of the document.\n   - Rule: If no period dates are found, but dates appear in the document, attempt to infer statement_date from the header or summary section before leaving it null.\n\nBy applying these generalized rules, future extractions will avoid returning fully null/empty statements with high confidence, will better detect and handle layout or parsing failures, and will enforce minimal completeness for critical bank statement fields.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E12",
+        "created_at_utc": "2026-08-18T10:44:59.769725+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Required-field enforcement: For core statement fields (statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address, and at least one of bank_name/account_number), implement a hard requirement rule: if the parser cannot confidently extract these fields, the extraction should be marked as incomplete or failed rather than returning nulls as if they were valid values.\n\n2) Confidence recalibration rule: If any required field is missing or null after extraction, automatically cap confidence_level at a low value (e.g., <= 0.3) and never allow 1.0. Confidence_level = 1.0 must only be used when all required fields are present and pass basic validation (date formats, numeric formats, non-empty strings).\n\n3) Explicit failure status: Introduce and populate a separate status flag (e.g., extraction_status: \"failed\" or \"incomplete\") whenever required fields are not found. Downstream systems should treat this status as higher priority than the numeric confidence score. Do not silently return a normal-looking JSON with nulls for required fields.\n\n4) Template population rule: Do not auto-populate the full MERGED_EXTRACTION template with nulls when the document cannot be parsed or when the parser has extremely low confidence. Instead, either (a) omit the fields and mark extraction_status as \"failed\", or (b) populate only those fields that have explicit matches and leave the rest absent, accompanied by a clear status and low confidence.\n\n5) Date and balance cross-check: When any of statement_period_start, statement_period_end, or statement_date is missing, trigger a secondary search pass focused on date patterns (e.g., MM/DD/YYYY, DD MMM YYYY, etc.) in typical locations (top header, page corners, summary sections). If still not found, mark these fields as \"unextractable\" and set extraction_status to \"incomplete\" rather than leaving them as null with high confidence. Similarly, if opening_balance is missing, attempt to infer it from prior closing_balance or summary sections; if inference fails, mark as unextractable and lower confidence.\n\n6) Customer identity requirement: Treat customer_name and mailing_address as mandatory for personal or business bank statements. If they cannot be extracted from the header, address block, or customer information section, mark extraction_status as \"incomplete\" and reduce confidence. Do not allow a fully null identity block to pass as a normal extraction.\n\n7) Validation-before-merge rule: Before finalizing MERGED_EXTRACTION, run a validation pass that checks for null/empty required fields. If any are found, do not finalize the merged JSON as-is; instead, either (a) re-run extraction with relaxed patterns or alternative models, or (b) explicitly mark the result as incomplete/failed and adjust confidence_level accordingly.\n\n8) Logging and diagnostics: Whenever required fields are missing, log which fields failed and why (e.g., no matching pattern, low OCR quality, ambiguous matches). Use this log to refine extraction patterns and to avoid repeating the same silent-null behavior in future documents.\n\nThese rules should be applied generically to all bank statement extractions so that a complete null-filled template with high confidence is never treated as a valid result. Instead, missing critical fields must trigger low confidence, explicit failure/incomplete status, and, where possible, additional extraction attempts.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E13",
+        "created_at_utc": "2026-08-18T10:56:57.392415+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Minimum completeness rule: Before finalizing any merged bank statement extraction, enforce a minimum set of required fields that must be non-null and non-empty. At a minimum, require: bank_name, customer_name, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, and either (a) a non-empty transactions array or (b) an explicit flag that the statement has no transactions. If these required fields are missing, the extraction must be marked as incomplete and should not be assigned a high confidence.\n\n2) Confidence gating rule: The confidence_level must be aligned with data completeness. If any required field is null or empty, cap confidence_level at a low value (e.g., <= 0.3) and attach an internal reason code (e.g., MISSING_REQUIRED_FIELDS). Only allow confidence_level >= 0.8 when all required fields are present and basic validations (date ranges, balance consistency, transaction_count vs transactions length) pass.\n\n3) Null-blocking rule for critical fields: For critical fields (statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address), do not silently accept null values from upstream extractors. Instead, trigger one of the following: (a) re-run OCR/extraction with alternative templates or models; (b) attempt secondary heuristics (e.g., searching for date patterns near known headers, or name/address blocks near bank logo); (c) explicitly mark the field as UNEXTRACTED and propagate that status to downstream validators.\n\n4) Period and date validation rule: When statement_period_start and statement_period_end are extracted, validate that: (a) both are valid dates; (b) statement_period_start <= statement_period_end; (c) statement_date is on or after statement_period_end and within a reasonable window (e.g., 0–60 days). If any of these checks fail or the dates are missing, lower confidence and flag the extraction as incomplete instead of leaving dates null.\n\n5) Balance consistency rule: Enforce that opening_balance and closing_balance must be present and numeric. If they are missing, do not finalize the extraction as valid. When transactions are present, verify that opening_balance + sum(transactions) ≈ closing_balance (within a small tolerance for rounding). If this check cannot be performed due to missing balances, mark the extraction as incomplete and reduce confidence.\n\n6) Customer identity rule: Require customer_name and mailing_address for a bank statement. If either is missing or empty, treat the extraction as incomplete. Implement a layout-based heuristic: search for name/address blocks in typical regions (top-left, top-right, or under bank logo) and cross-check with postal patterns (ZIP codes, city/state formats) to populate these fields before finalizing.\n\n7) Transaction integrity rule: If transaction_count is provided, it must equal the length of the transactions array. If transactions is empty but the document appears to contain a transaction table (e.g., detected by headers like \"Date\", \"Description\", \"Amount\"), treat this as an extraction failure and re-run or flag. If the statement truly has no transactions, explicitly set transaction_count to 0 and mark a has_transactions flag as false, rather than leaving the array empty without explanation.\n\n8) Merge-layer safeguard rule: At the MERGED_EXTRACTION stage, implement a final validation layer that checks all the above rules before emitting the JSON. If the extraction fails minimum completeness or critical validations, the merge layer should: (a) not output a fully null/empty object; (b) instead output a structured error state (e.g., {\"status\": \"incomplete\", \"missing_fields\": [...]}) or trigger a re-extraction workflow; and (c) ensure confidence_level reflects the failure state.\n\n9) Template/format detection rule: When the system cannot confidently detect the document as a bank statement (e.g., missing typical headers like \"Account Summary\", \"Statement Period\", or bank branding), it should not attempt to produce a full bank_statement schema with nulls. Instead, classify the document as UNKNOWN or UNSUPPORTED and avoid populating the bank_statement structure, thereby preventing misleading null-filled outputs.\n\nBy enforcing these generalized rules, future extractions will avoid emitting high-confidence, nearly empty bank statement JSON objects and will instead either recover the missing data or clearly mark the extraction as incomplete/low-confidence.",
+        "confidence": 0.9,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E14",
+        "created_at_utc": "2026-08-18T11:05:05.837206+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Mandatory field enforcement: For bank statements, treat the following as mandatory fields: bank_name, statement_period_start, statement_period_end, statement_date, customer_name, and at least one of (account_number, routing_number). If, after extraction, any of these mandatory fields are null or empty, the extraction must not be marked as high confidence.\n\n2) Confidence gating rule: If more than 30% of mandatory fields are null or empty, set confidence_level <= 0.3 and flag the extraction as a probable failure. If all mandatory fields are null, set confidence_level = 0.0 and mark the record as extraction_failed.\n\n3) Structural vs. semantic success: Distinguish between structural success (JSON schema filled) and semantic success (key fields populated). Only when both are satisfied may confidence_level exceed 0.7. If the JSON is structurally valid but key fields are missing, treat this as a semantic failure and trigger fallback logic.\n\n4) Fallback parsing and re-OCR: When the semantic failure condition is met (e.g., bank_name, statement_period_start, statement_period_end, and customer_name all null), automatically: (a) re-run OCR with alternative settings (different language packs, DPI adjustments, or layout modes), and (b) apply a simpler, layout-agnostic parser that searches for common bank statement patterns (e.g., 'Statement Period', 'From', 'To', 'Account Number', 'Routing Number', 'Customer Name', 'Statement Date'). Only after these attempts fail should the system finalize an extraction_failed status.\n\n5) Header and metadata heuristics: Implement pattern-based extraction for key fields before deeper parsing:\n   - bank_name: Look at the top 15% of the page for large-font text or known bank name patterns (e.g., words followed by 'Bank', 'Credit Union', 'Savings', 'National Association').\n   - statement_period_start/statement_period_end: Search for lines containing 'Statement Period', 'Period', 'From', 'To', or date ranges separated by '-' or 'to'. Parse the first valid date range found.\n   - statement_date: Search for 'Statement Date', 'Issue Date', or 'Date of Statement' near the top-right or near the period line.\n   - customer_name and mailing_address: Look for a block of text near the top-left or under the bank header that resembles a name followed by multiple address lines (street, city, state, ZIP). Use address pattern recognition (e.g., presence of street suffixes, ZIP codes) to validate.\n\n6) Transactions sanity check: If the statement_period_start and statement_period_end are successfully extracted but the transactions array is empty, lower confidence_level to <= 0.6 and flag a warning. Most bank statements contain at least one transaction or an explicit 'No activity' indicator. If no such indicator is found and transactions remain empty, treat this as a partial extraction and trigger a secondary pass focused on the transaction table region.\n\n7) Null-field validation rule: Before finalizing the merged extraction, run a validation pass that:\n   - Logs any field that is null but expected for the document type.\n   - Prevents promotion of such an extraction to high confidence.\n   - Attaches a machine-readable error list (e.g., missing_fields: [\"statement_period_start\", \"statement_period_end\", \"customer_name\", \"mailing_address\"]).\n\n8) Previous statement linkage (when available): For opening_balance, if a previous statement's closing_balance is known, enforce a soft rule that opening_balance must equal that closing_balance within a small tolerance. If opening_balance is null while previous closing_balance exists, mark this as a critical missing field and reduce confidence_level below 0.5.\n\n9) Global rule for UNKNOWN or unparseable documents: If the document type is UNKNOWN or the layout does not match any known bank statement templates and key fields remain null after fallback attempts, explicitly classify the document as unrecognized_document_type and avoid populating a generic bank_statement structure with nulls. This prevents misinterpretation of non-statement documents as valid statements.\n\n10) QA and monitoring rule: Track the rate of extractions where all mandatory fields are null. If this rate exceeds a threshold (e.g., 1% of statements), trigger an alert to review OCR quality, template coverage, or recent model changes. Use these cases to refine pattern libraries and layout detection.\n\nThese rules should be applied generically to all future bank statement extractions to ensure that null-filled outputs are treated as failures or low-confidence results, and to enforce targeted re-processing and validation before finalizing the merged JSON.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E15",
+        "created_at_utc": "2026-08-18T11:08:25.187839+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Critical-field completeness rule: For bank statements, define a set of mandatory fields (e.g., statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address). If any of these are null or empty after extraction, the overall confidence_level must be reduced significantly (e.g., below 0.5) and a validation error should be raised. Do not allow a confidence_level of 1.0 when any mandatory field is missing.\n2) Header parsing rule: Implement targeted header extraction patterns for statement metadata. Specifically: (a) Search the top 25% of the page for date ranges using patterns like \"Statement Period\", \"From/To\", \"For the period\", or date ranges in formats such as MM/DD/YYYY - MM/DD/YYYY or DD MMM YYYY to DD MMM YYYY; (b) Search for a single statement date near labels like \"Statement Date\", \"Date\", or near the bank logo; (c) Extract opening_balance from lines containing \"Beginning Balance\", \"Opening Balance\", or \"Balance as of\" near the start of the transaction section.\n3) Customer identity rule: For customer_name and mailing_address, prioritize the block of text near labels like \"Account Holder\", \"Customer\", or the first address block under the bank logo. Use heuristics: (a) customer_name is typically the first line of that block with capitalized words; (b) mailing_address is the subsequent lines until a blank line or a known label (e.g., \"Account Number\", \"Statement Period\"). If no plausible name/address block is found, mark these fields as missing and lower confidence.\n4) Transaction presence rule: If the document is recognized as a bank statement but the transactions array is empty and transaction_count is 0, trigger a secondary parsing pass focused on tabular regions (rows with dates, descriptions, amounts). If still no transactions are found, flag the extraction as incomplete and reduce confidence, rather than returning an empty list with high confidence.\n5) Null-guard merging rule: During MERGED_EXTRACTION, do not overwrite previously extracted non-null values with nulls from other extraction passes. When merging multiple extraction sources, prefer non-null, validated values and only fall back to null when all sources fail. Additionally, if all sources yield null for a mandatory field, explicitly mark that field as missing and propagate a validation error.\n6) Validation feedback loop: Integrate the error messages (e.g., \"statement_period_start is null\", \"customer_name should not be empty\") into the extraction pipeline so that they trigger re-parsing or alternative extraction strategies (e.g., OCR re-run, different layout model) before finalizing the MERGED_EXTRACTION. Only finalize when either mandatory fields are populated or the system explicitly classifies the document as non-statement/unsupported.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E16",
+        "created_at_utc": "2026-08-18T11:30:27.814717+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Mandatory critical fields rule: Define a set of required fields for bank statements (e.g., statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address). After extraction, if any of these fields are null or empty, mark the extraction as incomplete and do not assign a high confidence score.\n\n2) Confidence recalibration rule: Confidence_level must be a function of both field-level extraction confidence and field completeness. Implement a rule such as:\n   - If any mandatory field is null, cap confidence_level at <= 0.3.\n   - If more than 50% of mandatory fields are missing, set confidence_level <= 0.1 and flag the record for manual review.\n\n3) Null-detection and fallback rule: When the parser fails to detect key metadata (dates, balances, customer name, address), trigger a secondary extraction strategy before finalizing null values. For example:\n   - Re-scan the document using alternative templates (different bank layouts, languages, or page regions).\n   - Use pattern-based search for dates (e.g., MM/DD/YYYY, DD MMM YYYY) and monetary values near known labels (\"Opening Balance\", \"Closing Balance\", \"Statement Period\").\n   - For customer_name and mailing_address, search the top portion of the first page and any address blocks, using heuristics like name lines followed by multi-line addresses.\n\n4) Structural validation rule: Before finalizing the merged JSON, run structural checks:\n   - Ensure at least one transaction or a clear indication that there are no transactions (e.g., explicit statement text). If transactions array is empty and balances are also null, treat this as a likely extraction failure, not a valid empty statement.\n   - Ensure that statement_period_start <= statement_period_end and that statement_date falls within or after the period; if these fields are missing, mark the record as invalid for automated processing.\n\n5) Bank-specific template rule: If bank_name is null, attempt to infer it from logos, headers, or recurring phrases. If bank_name cannot be determined, avoid using bank-specific templates and instead apply generic extraction rules. Conversely, if bank_name is known but key fields are still missing, log a template-mismatch error and lower confidence.\n\n6) Validation feedback loop rule: Integrate validator errors back into the extraction pipeline. When the validator reports messages such as \"statement_period start is null\", \"opening_balance is null\", or \"customer_name should not be empty or null\":\n   - Automatically re-run extraction with relaxed constraints or alternative models.\n   - If re-extraction still yields null, annotate the record with explicit failure reasons and set confidence_level to a low value, rather than leaving it at 1.0.\n\n7) Default value prohibition rule: Do not assign default high confidence or placeholder values when fields are missing. The absence of data must be explicitly represented (null) and reflected in confidence_level and status flags (e.g., status: \"incomplete\").\n\n8) Merged extraction consistency rule: When merging multiple extraction candidates, prefer a candidate with more populated mandatory fields over one with higher raw model confidence but many nulls. Implement a scoring function that penalizes missing mandatory fields heavily so that a nearly empty extraction cannot win the merge.\n\nApplying these rules ensures that future extractions will either populate the critical fields correctly or clearly signal low confidence and incomplete data, preventing silent failures like a fully null statement with confidence_level 1.0.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E17",
+        "created_at_utc": "2026-08-18T11:58:19.981299+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Confidence handling for null-heavy outputs:\n- If all or a majority of critical fields are null (e.g., statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, account_number, bank_name), then:\n  - Set confidence_level to a low value (e.g., <= 0.2) and mark the extraction as incomplete.\n  - Do not default confidence_level to 1.0 when required fields are missing or unparsed.\n- Implement a rule: confidence_level must be capped based on the proportion of required fields successfully extracted.\n\n2) Required-field gating:\n- Define a minimal required set for a bank statement: at least {statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name}.\n- If this minimal set is not satisfied:\n  - Do not treat the extraction as a valid statement; instead, mark it as `status: \"incomplete\"` or equivalent in internal logic.\n  - Avoid running downstream validations that assume a valid statement period and balances; instead, emit a clear error that the document could not be reliably parsed.\n\n3) Transaction count vs. array consistency:\n- Always enforce: transaction_count == length(transactions array). If they match (including 0 == 0), the structural check passes.\n- Separate structural checks from semantic checks:\n  - Structural: count vs. array length.\n  - Semantic: whether a statement should contain transactions given the period and balances.\n- Only raise a structural error when transaction_count != length(transactions).\n- For semantic concerns (e.g., a non-zero period but zero transactions), raise a different warning, not a count mismatch error.\n\n4) Null handling for customer_name and mailing_address:\n- Treat customer_name and mailing_address as required for a valid statement. If they are null or empty:\n  - Lower confidence_level.\n  - Flag the extraction as incomplete rather than silently accepting nulls.\n- Implement a rule: if customer_name is null AND mailing_address is null, classify the extraction as likely failed header parsing.\n\n5) Distinguish between \"no data\" and \"no statement\":\n- If the parser cannot detect any statement-specific markers (dates, balances, account identifiers) and all key fields remain null:\n  - Classify the document as either non-statement or unreadable, rather than returning an empty statement object.\n  - Provide an explicit internal status (e.g., `parse_status: \"no_statement_detected\"`).\n\n6) Validation ordering and short-circuiting:\n- Before running detailed validations (period ordering, date vs. period, balance continuity), check whether the minimal required set of fields is present.\n- If not present, short-circuit: skip dependent validations and return a clear, single root-cause error (e.g., \"insufficient data to validate statement\").\n\n7) General extraction rule:\n- For future cases, implement a scoring-based completeness check:\n  - Assign weights to fields (e.g., period dates, balances, customer_name, account_number).\n  - Compute a completeness score; map this score to confidence_level.\n  - If completeness score is below a threshold, treat the extraction as incomplete and do not label it as high confidence.\n\nBy applying these rules, future extractions will avoid producing high-confidence, fully null statements, will clearly distinguish between structural and semantic issues, and will provide more accurate and actionable validation outcomes.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E18",
+        "created_at_utc": "2026-08-18T12:08:58.384015+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Confidence handling rule: If any required top-level fields (e.g., statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, bank_name, account_number) remain null after extraction, the global confidence_level must be reduced below a high-confidence threshold (e.g., < 0.7) and/or a specific 'extraction_incomplete' flag should be set. Never output confidence_level = 1.0 when one or more required fields are null.\n\n2) Required-field enforcement rule: Define a schema of required fields for bank statements (at minimum: statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address). Before finalizing the merged extraction, run a validation step:\n   - If any required field is null or empty, mark the extraction as incomplete and either: (a) attempt a secondary/backup extraction pass (e.g., different OCR mode, different layout heuristic), or (b) explicitly set those fields to a special value (e.g., \"UNKNOWN\") and lower confidence.\n   - Do not silently accept nulls for these fields without adjusting confidence and logging a structured error.\n\n3) Transaction count derivation rule: transaction_count must always equal the length of the transactions array. After merging all extraction sources, compute transaction_count = len(transactions) if transaction_count is null or inconsistent. This rule applies even when there are zero transactions: transaction_count must be set to 0, not left null.\n\n4) Null-output safeguard rule: If the system cannot parse any meaningful content from the source document (e.g., all major fields are null and transactions is empty), it should:\n   - Avoid returning a fully-populated JSON with nulls and high confidence.\n   - Instead, return a clearly marked failure or minimal-structure object (e.g., only metadata plus an error field) indicating that extraction failed or the document was unreadable.\n   - Optionally, trigger a fallback OCR or layout strategy before declaring failure.\n\n5) Customer identity fields rule: For customer_name and mailing_address, implement stricter extraction and validation:\n   - Use pattern-based and positional heuristics (e.g., look for name/address blocks near the top of the statement, near labels like \"Account Holder\", \"Mailing Address\", etc.).\n   - If these fields cannot be confidently extracted, set them to a placeholder (e.g., \"UNKNOWN_NAME\", \"UNKNOWN_ADDRESS\") and lower confidence, rather than leaving them null with a high confidence.\n\n6) Period/date consistency rule: For statement_period_start, statement_period_end, and statement_date:\n   - Require at least one date to be present; if none are found, mark extraction as incomplete and reduce confidence.\n   - Use multiple date-detection strategies (header lines, known bank templates, regex for date formats) before giving up.\n   - If only one of the period dates is found, attempt to infer the other from context (e.g., from statement_date or from repeated patterns across pages) but clearly mark inferred values and lower confidence.\n\n7) Post-merge validation pipeline rule: After merging extractions from different sources (OCR, templates, heuristics), run a final validation step that:\n   - Checks for nulls in required fields.\n   - Ensures derived fields (like transaction_count) are consistent with their sources.\n   - Adjusts confidence_level based on the number and severity of missing/invalid fields.\n   - Logs specific validation errors to guide future model or rule improvements.\n\nBy implementing these rules, future extractions will avoid returning fully null or incomplete statements with artificially high confidence, will automatically populate transaction_count from the transactions array, and will more reliably flag or correct missing critical fields.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E19",
+        "created_at_utc": "2026-08-18T12:14:19.114174+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Null-field confidence rule: If any required field (statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, transaction_count) is null or empty after merging, the global confidence_level must be capped at a low value (e.g., <= 0.3). If all required fields are null, confidence_level must not exceed 0.1.\n\n2) Hard-fail rule for fully empty statements: If all of the following are missing or empty: (a) statement_period_start and statement_period_end, (b) statement_date, (c) opening_balance and closing_balance, (d) customer_name, (e) mailing_address, and (f) transactions list (length == 0), then the extraction should be treated as a hard failure. In this case, do not output a \"successful\" MERGED_EXTRACTION; instead, flag the record as extraction_failed and trigger a re-run or manual review.\n\n3) Required-field validation rule: Before finalizing the merged JSON, run a validation step that enforces minimum completeness:\n   - At least one of: statement_period_start or statement_period_end or statement_date must be non-null.\n   - At least one of: opening_balance or closing_balance must be non-null.\n   - customer_name and mailing_address must not both be null.\n   - transaction_count must either be a positive integer or, if transactions is an empty list, explicitly set to 0 and confidence_level reduced.\nIf these conditions are not met, mark the extraction as incomplete and lower confidence_level accordingly.\n\n4) Source-availability rule: If the source document or OCR text is missing, unreadable, or not provided to the extraction engine, do not attempt to construct a default JSON with nulls. Instead, return a structured error (e.g., {\"status\": \"no_source_data\"}) and skip setting confidence_level to 1.0.\n\n5) Confidence derivation rule: Compute confidence_level as a function of field coverage and per-field confidence scores. For example, define a coverage ratio = (number of non-null required fields) / (total required fields). Enforce: confidence_level <= coverage_ratio. This prevents a fully null extraction from ever reaching high confidence.\n\n6) Merging behavior rule: During MERGED_EXTRACTION creation, do not overwrite previously extracted non-null values with nulls from other extraction passes. Only promote null to the merged result if all candidate extractions for that field are null. This reduces the chance of losing valid data during merging.\n\n7) Transaction-count consistency rule: If transactions is an empty list but the statement is otherwise populated, set transaction_count explicitly to 0 and reduce confidence_level to reflect the uncertainty about missing transaction data. If both transactions and transaction_count are null, treat this as a sign of extraction failure and apply the hard-fail rule in (2).\n\nThese rules should be applied generically to all bank statement extractions to prevent high-confidence, fully-null outputs and to ensure that missing critical fields are caught and handled before final JSON emission.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E20",
+        "created_at_utc": "2026-08-18T12:17:35.377482+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "Introduce a multi-stage validation and fallback framework for bank statement extraction:\n\n1. **Critical Field Presence Validation**\n   - Define a set of required top-level fields for any bank statement: `statement_period_start`, `statement_period_end`, `statement_date`, `opening_balance`, `closing_balance`, `customer_name`, `mailing_address`.\n   - After extraction and before merging, run a validation step:\n     - If more than N (e.g., 2) of these required fields are null or empty, mark the extraction as `failed` or `incomplete` and do not assign high confidence.\n     - If all required fields are null, set `confidence_level` to a very low value (e.g., <= 0.1) and flag the record for reprocessing or manual review.\n\n2. **Confidence Calibration Rule**\n   - Never default `confidence_level` to 1.0. Instead:\n     - Compute confidence as a function of the proportion of required fields successfully extracted.\n     - Example rule: `confidence_level = (#non_null_required_fields / #required_fields)` capped between 0.1 and 0.99.\n     - If `transactions` is empty and all monetary fields (opening_balance, closing_balance) are null, automatically reduce confidence by a fixed factor (e.g., multiply by 0.5).\n\n3. **Null-Guarded Merge Logic**\n   - When merging multiple extraction sources (OCR, templates, heuristics), apply these rules:\n     - Do not overwrite a non-null field with null during merge.\n     - If all sources provide null for a required field, explicitly tag that field as `missing` and propagate this status to the validation layer.\n     - If the entire document text is missing or unreadable, short-circuit the pipeline and return a clearly marked failure object instead of a normal MERGED_EXTRACTION.\n\n4. **Customer Identity and Address Rules**\n   - Treat `customer_name` and `mailing_address` as mandatory identity fields:\n     - If both are null or empty, classify the extraction as `identity_missing` and set `confidence_level` <= 0.3.\n     - Add a rule to attempt recovery from common locations (top header, address block, page footer) before finalizing them as null.\n     - If partial address is found (e.g., street but no city/zip), still populate `mailing_address` with the partial data and mark it as `partial` rather than leaving it null.\n\n5. **Date Extraction Fallbacks**\n   - Implement layered date extraction:\n     - Primary: parse explicit labels like \"Statement Period\", \"From/To\", \"Statement Date\".\n     - Secondary: infer from page headers/footers or file metadata (e.g., known statement month/year in filename) when explicit labels are missing.\n     - If no dates can be found, set all date fields to null but mark a `date_status` flag as `missing` and reduce confidence.\n\n6. **Balance Extraction and Consistency Checks**\n   - For `opening_balance` and `closing_balance`:\n     - Primary: extract from labeled sections (e.g., \"Beginning Balance\", \"Ending Balance\").\n     - Secondary: infer from the earliest and latest running balances in the transaction table when labels are missing.\n     - If both balances are null and there are no transactions, mark `balance_status` as `missing` and reduce confidence.\n     - If one balance is found but not the other, still populate the known one and mark the other as `missing` rather than leaving both null.\n\n7. **Empty-Result Safeguard**\n   - If the final MERGED_EXTRACTION has:\n     - `transactions` empty AND\n     - all required fields null or empty,\n     then:\n     - Do not treat this as a valid extraction.\n     - Return a structured error object or a special status field (e.g., `extraction_status: \"no_data\"`) and set `confidence_level` <= 0.1.\n\n8. **Logging and Reprocessing Hooks**\n   - Log cases where required fields are missing with enough context (document ID, page count, OCR status) to allow targeted improvements.\n   - Automatically queue such cases for re-OCR or alternative parsing strategies (different language models, templates, or layout analyzers).\n\nBy enforcing these generalized rules, future extractions will (a) avoid returning fully null critical fields with high confidence, (b) better utilize partial or inferred information, and (c) clearly distinguish between successful, partial, and failed extractions.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E21",
+        "created_at_utc": "2026-08-18T12:19:42.922543+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Enforce non-empty extraction before validation:\n- Rule: If all primary fields (bank_name, account_number, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address) are null AND transactions array is empty, classify the extraction as a hard failure and do not proceed to validation. Instead, trigger a re-extraction attempt (e.g., different OCR settings, alternate model) or mark the document as `unparsed_document` with an explicit error.\n\n2) Minimum confidence gating:\n- Rule: Do not emit a MERGED_EXTRACTION with `confidence_level < 0.3` (or another configured floor). If the best available extraction has confidence below this floor, return a structured error object (e.g., `status: \"low_confidence_extraction\"`) instead of a normal extraction payload.\n- Rule: For any extraction that passes the minimum floor but is still < 0.7, attempt targeted refinement (e.g., re-run NER on header region for bank_name, customer_name, and mailing_address) before finalizing.\n\n3) Mandatory core fields and fallback strategies:\n- Rule: Treat the following as mandatory for a valid bank statement extraction: `customer_name`, `statement_period_start`, `statement_period_end`, `statement_date`, `opening_balance`, `closing_balance`, and `transaction_count`. If any of these are null after the first pass, run a secondary extraction step focused on:\n  - Header and address blocks for `customer_name` and `mailing_address`.\n  - Date patterns near phrases like \"Statement Period\", \"From\", \"To\", \"Statement Date\" for period and statement dates.\n  - Summary or balance sections for opening/closing balances.\n  - Transaction table for counting rows to infer `transaction_count`.\n- Rule: If after secondary extraction any mandatory field remains null, mark the field explicitly as `missing` and set a field-level confidence of 0, and downgrade the overall `confidence_level` accordingly. Do not silently leave mandatory fields null without explanation.\n\n4) Partial extraction is better than empty extraction:\n- Rule: When some fields can be extracted with acceptable confidence, populate them even if others remain null. Avoid defaulting the entire MERGED_EXTRACTION to nulls because a subset of fields is low-confidence. For example, if customer_name and mailing_address are confidently extracted but balances are not, still output those fields and clearly mark which fields are missing.\n\n5) Robust document-type detection:\n- Rule: Before extraction, run a document-type classifier. If the classifier is uncertain whether the document is a bank statement, either:\n  - Route to a generic extraction pipeline and label the result as `document_type_uncertain`, or\n  - Fail early with a clear error instead of producing an all-null bank statement structure.\n- Rule: If the classifier confirms it is a bank statement but extraction yields mostly nulls, log this as a critical extraction failure and trigger a diagnostic or fallback model.\n\n6) Validation-aware extraction loop:\n- Rule: Integrate validation feedback into the extraction loop. If validation reports that key fields are null (e.g., statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address, transaction_count), automatically:\n  - Re-run extraction focusing on those specific fields.\n  - Use contextual constraints (e.g., dates must be within a plausible range, balances must be numeric and consistent) to filter candidate values.\n- Rule: Only run full validation once a minimum set of mandatory fields is populated; otherwise, return a `pre_validation_failure` status indicating which fields prevented validation.\n\n7) Transaction handling and transaction_count:\n- Rule: If `transactions` array is empty but the document appears to contain a transaction table (detected via layout or keywords like \"Date\", \"Description\", \"Amount\"), treat this as an extraction error and re-run table extraction with alternate settings.\n- Rule: Always derive `transaction_count` from the length of the `transactions` array when possible. If `transactions` is non-empty but `transaction_count` is null, set `transaction_count = len(transactions)` and mark it as system-derived.\n\n8) Confidence computation and thresholds:\n- Rule: Compute `confidence_level` as an aggregate of field-level confidences, weighted by importance (e.g., dates and balances have higher weight). If most key fields are missing or have very low confidence, the overall confidence must reflect that and should not be arbitrarily set to 0.0 without explanation.\n- Rule: Enforce a minimum acceptable `confidence_level` (e.g., 0.7) for a result to be considered production-ready. Below this threshold, either:\n  - Return the extraction with a `status: \"low_confidence\"` and require manual review, or\n  - Do not pass the result to downstream systems expecting validated data.\n\n9) Logging and monitoring for empty outputs:\n- Rule: Log any case where more than 70% of primary fields are null or where `confidence_level == 0.0`. These should be monitored as systemic issues (e.g., OCR failures, template drift, new bank formats) and used to retrain or adjust extraction models.\n\nBy enforcing early failure for fully empty outputs, implementing minimum confidence thresholds, requiring mandatory fields with targeted re-extraction, and integrating validation feedback into the extraction loop, future bank statement extractions will avoid passing all-null, zero-confidence payloads to validation and downstream consumers.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E22",
+        "created_at_utc": "2026-08-18T12:32:09.399929+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1) Add a completeness check after extraction: if all critical fields (customer_name, mailing_address, statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, transaction_count, confidence_level) are null or missing AND transactions.length == 0, then: (a) do not treat this as a successful extraction; (b) set a status flag like extraction_status = \"failed_no_data\"; and (c) trigger either a re-run with relaxed parsing or route to manual review.\n2) Define a minimal required field set: require at least one of {customer_name, account_number, bank_name} AND at least one of {statement_period_start, statement_period_end, statement_date}. If these minimal requirements are not met, block the extraction from being marked as complete and return a structured error instead of a partially empty MERGED_EXTRACTION.\n3) Enforce confidence_level defaults: if the model or parser cannot compute confidence_level, set it explicitly to a low default (e.g., 0.0) and mark extraction_status = \"failed_low_confidence\". Never leave confidence_level as null; this allows validators to distinguish between low confidence and missing data.\n4) Transactions vs transaction_count rule: if transaction_count is null but transactions array is also empty, treat this as a sign of missing extraction rather than a valid \"no activity\" statement unless there is explicit evidence (e.g., a statement header saying \"No transactions this period\"). In ambiguous cases, require at least one non-transaction field (e.g., balances or period dates) to be present before accepting an empty transactions list as valid.\n5) Pre-validation guard: before running detailed validation rules (period checks, balance checks), run a structural sanity check that ensures: (a) at least one date field is present; (b) at least one balance field is present; and (c) at least one identity field (customer_name, account_number, or bank_name) is present. If this pre-check fails, short-circuit validation and return a clear error indicating \"insufficient data extracted\".\n6) Logging and monitoring: whenever an extraction results in all-null critical fields, log the document type, template, and parser version. Use this to identify recurring template-specific failures and update parsing rules or OCR configurations accordingly.\n7) Template-aware fallback: if the system knows the document is a bank statement but cannot parse any fields, attempt a template-agnostic fallback (e.g., generic date and currency pattern matching) to populate at least statement_period and balances. Only if this fallback also fails should the system emit an all-null extraction and mark it as failed.\nThese rules should be applied generically to all bank statement extractions to prevent passing through completely empty or unusable MERGED_EXTRACTION objects and to ensure that missing critical fields are caught early and handled explicitly.",
+        "confidence": "0.93",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E23",
+        "created_at_utc": "2026-08-22T15:37:23.273735+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Mandatory statement fields must not be null",
+                    "description": "For bank statements, certain fields are mandatory: statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, and mailing_address. After extraction, run a validation step that checks these fields. If any mandatory field is null or empty, the extraction must be flagged as incomplete and confidence_level must be reduced accordingly (e.g., below 0.5), rather than returning high confidence with null values.",
+                    "logic": {
+                        "if": "statement_period_start == null OR statement_period_end == null OR statement_date == null OR opening_balance == null OR customer_name == null OR mailing_address == null",
+                        "then": {
+                            "set_confidence_level": "min(current_confidence_level, 0.4)",
+                            "set_status": "incomplete_extraction",
+                            "require_additional_parsing": true
+                        }
+                    }
+                },
+                {
+                    "name": "Header and cover-page search for core fields",
+                    "description": "When initial extraction does not find statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, or mailing_address in the primary layout, perform a secondary search in typical header and cover-page regions. Bank statements often place these fields at the top of the first page or in a dedicated summary section.",
+                    "logic": {
+                        "search_regions": [
+                            "top 25% of first page",
+                            "any section labeled 'Statement Period', 'Account Summary', or 'Customer Information'",
+                            "address blocks near the bank logo or customer name"
+                        ],
+                        "fields_to_extract": [
+                            "statement_period_start",
+                            "statement_period_end",
+                            "statement_date",
+                            "opening_balance",
+                            "closing_balance",
+                            "customer_name",
+                            "mailing_address"
+                        ]
+                    }
+                },
+                {
+                    "name": "Customer name and mailing address block detection",
+                    "description": "Customer name and mailing address typically appear together as an address block. If customer_name or mailing_address is missing, attempt to detect an address block pattern (name line followed by 1–4 lines of address) and map it to these fields.",
+                    "logic": {
+                        "pattern": "Line 1: probable name (contains alphabetic words, may include middle initials, no currency or numeric-only patterns). Lines 2–5: address lines (contain street, city, state, postal code).",
+                        "if": "customer_name == null OR mailing_address == null",
+                        "then": {
+                            "extract_block": "nearest address-like block to the top-left region of the first page or to any 'To:' or 'Account Holder:' label",
+                            "map": {
+                                "first_line": "customer_name",
+                                "remaining_lines_joined_with_newlines": "mailing_address"
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "Statement period normalization and validation",
+                    "description": "Statement period start and end dates should be extracted from phrases like 'Statement Period', 'From ... To ...', or 'For the period'. If these fields are missing, search for such phrases and parse the dates. Validate that the end date is on or after the start date.",
+                    "logic": {
+                        "search_patterns": [
+                            "Statement Period",
+                            "From [date] To [date]",
+                            "For the period [date] - [date]"
+                        ],
+                        "validation": {
+                            "ensure": "statement_period_end >= statement_period_start",
+                            "on_failure": {
+                                "flag": "invalid_period",
+                                "lower_confidence": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "Statement date fallback from print/issue date",
+                    "description": "If statement_date is not directly labeled, use the print date or issue date commonly found near the top-right corner or in a 'Date' field. Ensure the date falls within or immediately after the statement period.",
+                    "logic": {
+                        "search_patterns": [
+                            "Statement Date",
+                            "Issue Date",
+                            "Print Date",
+                            "Date:"
+                        ],
+                        "validation": {
+                            "ensure": "statement_date >= statement_period_start AND statement_date <= statement_period_end + small_grace_period",
+                            "on_failure": {
+                                "flag": "uncertain_statement_date",
+                                "reduce_confidence_for_field": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "Opening and closing balance consistency check",
+                    "description": "Opening_balance and closing_balance should be extracted from the account summary section. If opening_balance is null, search for 'Beginning Balance', 'Opening Balance', or similar labels. Validate that closing_balance is present and that transaction totals reconcile approximately with the difference between closing and opening balances.",
+                    "logic": {
+                        "search_patterns": [
+                            "Beginning Balance",
+                            "Opening Balance",
+                            "Starting Balance",
+                            "Ending Balance",
+                            "Closing Balance"
+                        ],
+                        "validation": {
+                            "ensure": "opening_balance != null AND closing_balance != null",
+                            "reconcile": "closing_balance ≈ opening_balance + sum(credits) - sum(debits)",
+                            "on_failure": {
+                                "flag": "balance_inconsistency",
+                                "reduce_confidence_for_balance_fields": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "Transactions presence vs. statement type",
+                    "description": "A bank statement normally contains at least some transactions. If transactions is empty and transaction_count is 0, verify whether the document is truly a statement or a different document type (e.g., notice, summary letter). If it is a statement, treat empty transactions as a potential extraction failure.",
+                    "logic": {
+                        "if": "document_type == 'bank_statement' AND transaction_count == 0",
+                        "then": {
+                            "flag": "possible_transaction_extraction_failure",
+                            "trigger_additional_table_detection": true,
+                            "lower_overall_confidence": true
+                        }
+                    }
+                },
+                {
+                    "name": "Confidence level alignment with data completeness",
+                    "description": "Confidence_level must reflect actual data completeness and quality. If multiple mandatory fields are null, confidence_level cannot be 1.0. Implement a scoring mechanism that penalizes missing mandatory fields and inconsistencies.",
+                    "logic": {
+                        "base_confidence": "model_prediction_score",
+                        "penalties": {
+                            "missing_mandatory_field": "-0.1 per field",
+                            "invalid_date_range": "-0.1",
+                            "balance_inconsistency": "-0.1",
+                            "no_transactions_for_statement": "-0.1"
+                        },
+                        "final_confidence": "max(0.0, min(1.0, base_confidence - total_penalties))"
+                    }
+                },
+                {
+                    "name": "Explicit failure mode instead of silent nulls",
+                    "description": "When the system cannot reliably extract mandatory fields, it should explicitly mark the extraction as failed or partial, rather than silently returning nulls with high confidence. Downstream consumers can then handle this case appropriately.",
+                    "logic": {
+                        "if": "count_null_mandatory_fields >= 3",
+                        "then": {
+                            "set_status": "failed_or_partial",
+                            "set_confidence_level": "<= 0.3",
+                            "include_diagnostic": "List of missing fields and attempted extraction steps"
+                        }
+                    }
+                }
+            ]
+        },
+        "confidence": 0.78,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E24",
+        "created_at_utc": "2026-08-22T15:50:30.247241+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "Implement generalized, format-agnostic extraction and validation rules that reduce full-null outputs and improve resilience to UNKNOWN layouts:\n\n1. Document recognition and OCR robustness:\n   - Always run a layout-aware OCR pass (including detection of tables, headers, and blocks) before field extraction.\n   - If the document cannot be confidently classified as a bank statement, still perform generic financial-document parsing to attempt partial extraction of dates, balances, and parties.\n\n2. Generic date extraction rules:\n   - Search the entire document for date patterns (e.g., MM/DD/YYYY, DD MMM YYYY, YYYY-MM-DD) using regex and context windows.\n   - For statement_period_start and statement_period_end:\n     - Identify phrases like \"Statement Period\", \"For the period\", \"From\", \"To\", \"Through\" near date pairs.\n     - If multiple date ranges exist, prefer the one closest to the main header or account summary section.\n   - For statement_date:\n     - Look for single dates near phrases like \"Statement Date\", \"Date\", or in the top-right/top-left header region.\n   - If only one date range is found, assign its start and end to statement_period_start and statement_period_end, and use the end date or a nearby standalone date as statement_date.\n\n3. Generic customer name and mailing address rules:\n   - Identify candidate name/address blocks by locating text near keywords such as \"Account Holder\", \"Customer\", \"Client\", or by detecting address-like patterns (street names, postal codes, city/state formats).\n   - Use heuristics:\n     - Name: one or two lines with capitalized words, often above or adjacent to an address block.\n     - Address: multi-line block containing street number/name, city, state/region, and postal code.\n   - If multiple candidates exist, choose the block closest to the account summary or top-left area of the first page.\n   - Ensure mailing_address is stored as a single normalized string (e.g., lines joined with commas) while preserving original content.\n\n4. Generic balance extraction rules:\n   - Scan for summary sections containing keywords like \"Beginning Balance\", \"Opening Balance\", \"Starting Balance\", \"Ending Balance\", \"Closing Balance\", \"Balance as of\".\n   - Use numeric pattern detection for currency amounts (e.g., optional currency symbol, thousands separators, decimals) adjacent to these keywords.\n   - If explicit opening_balance is not found but a transaction table exists:\n     - Infer opening_balance from the earliest row if the table includes a \"Balance\" column.\n   - If closing_balance is missing but a final balance is shown in summary or last transaction row, use that as closing_balance.\n   - Always validate that balances are numeric and consistent with transaction totals when possible.\n\n5. Transactions and partial extraction strategy:\n   - Even when some header fields are missing, attempt to extract transactions from any tabular structures with date, description, amount, and balance columns.\n   - If transaction extraction succeeds but header fields are missing, use transaction dates to approximate statement_period_start and statement_period_end (earliest and latest transaction dates) as a fallback, clearly marking them as inferred.\n\n6. Confidence scoring and thresholds:\n   - Compute confidence_level as a weighted combination of:\n     - Field coverage (percentage of critical fields populated).\n     - Pattern match strength (how well text matches expected formats).\n     - Layout consistency (e.g., header fields in expected regions, tables properly detected).\n   - Avoid setting confidence_level to 0.0 unless OCR or parsing completely fails; for partial extraction, assign a non-zero confidence reflecting the reliability of extracted fields.\n   - Enforce a minimum confidence threshold (e.g., 0.7) for downstream acceptance, but when confidence < 0.7:\n     - Flag the record for re-processing with alternative models or human review.\n\n7. Validation-driven re-extraction loop:\n   - After initial extraction, run validation checks:\n     - Critical fields (statement_period_start, statement_period_end, statement_date, opening_balance, customer_name, mailing_address) must not be null.\n     - confidence_level must be >= 0.7 for automatic acceptance.\n   - If any critical field is null or confidence_level < 0.7:\n     - Trigger a secondary extraction pass using:\n       - More permissive regex patterns.\n       - Broader context windows around candidate keywords.\n       - Alternative language models or templates.\n     - If still unsuccessful, explicitly mark the extraction as \"partial\" and include a reason code (e.g., \"UNKNOWN_FORMAT\" or \"LOW_OCR_QUALITY\") for downstream handling.\n\n8. Handling UNKNOWN bank formats:\n   - Do not rely on bank-specific templates when bank_name is unknown; instead, apply generic rules for header detection, name/address blocks, and summary sections.\n   - Use clustering of visual regions (top header, left header, right header, body tables) to locate likely positions for statement dates, periods, and balances.\n   - Maintain a library of generic patterns that work across banks (e.g., \"Statement Period\", \"Account Number\", \"Routing Number\", \"Balance\", etc.) and apply them regardless of bank_name.\n\n9. Fail-safe behavior and output completeness:\n   - Never return a fully null MERGED_EXTRACTION unless the document is confirmed unreadable or non-financial.\n   - At minimum, attempt to populate:\n     - Any detected dates.\n     - Any candidate customer_name and mailing_address.\n     - Any numeric balances found in summary sections.\n   - Clearly annotate inferred or low-confidence fields in internal metadata (even if the public JSON only shows values and confidence_level) to support auditing and improvement.\n\nBy applying these generalized rules, future extractions for UNKNOWN or non-standard bank statements will be more robust, reducing the likelihood of all-null outputs and ensuring that critical fields are populated whenever the underlying document contains usable information.",
+        "confidence": 0.86,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E25",
+        "created_at_utc": "2026-08-22T17:24:43.779053+00:00",
+        "bank_name": "UNKNOWN",
+        "statement_id": "bank_statement",
+        "correction": "1. Mandatory field detection and re-parse rule: For critical fields (statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address), if any are null after initial extraction, trigger a secondary parsing pass focused on common layout patterns for bank statements (e.g., header blocks, date ranges near 'Statement Period', 'From/To', or 'Statement Date', summary sections labeled 'Beginning Balance'/'Ending Balance'). Do not finalize the merged extraction while these fields remain null unless the document is conclusively non-standard.\n\n2. Header and address block recognition rule: Always scan the top portion of the document (first page, upper quarter) for customer name and mailing address using patterns such as: a name line followed by one or more address lines (street, city, state, ZIP). If multiple candidates are found, select the block closest to the bank logo or the 'Account Statement' title. If customer_name or mailing_address are null after the first pass, re-run this header detection before returning the final JSON.\n\n3. Date range parsing rule: When a statement period is present, look for phrases like 'Statement Period', 'From', 'To', 'For the period', or date ranges separated by '-' or 'to'. Normalize all detected dates to a standard format (e.g., YYYY-MM-DD). If only one date is found near such phrases, attempt to infer whether it is the start or end based on surrounding text (e.g., 'through', 'ending'). If statement_date is missing, search for single dates near 'Statement Date', 'Issued', or in the top-right header area.\n\n4. Balance summary extraction rule: Identify summary sections using keywords such as 'Beginning Balance', 'Opening Balance', 'Ending Balance', 'Closing Balance', 'Balance as of'. Extract the numeric amounts adjacent to these labels. If opening_balance or closing_balance are null, re-scan the document for these keywords and associated amounts before finalizing.\n\n5. Transaction count consistency rule: Always set transaction_count to the length of the transactions array when transactions are successfully extracted. If transactions is empty but the document appears to contain a transaction table (e.g., rows with dates, descriptions, amounts), re-run table extraction. If no transactions are found after re-parse, set transaction_count explicitly to 0 instead of leaving it null, and ensure the validation logic compares this explicit 0 to the transactions length.\n\n6. Confidence aggregation and minimum threshold rule: Compute confidence_level as an aggregate of per-field confidence scores (e.g., weighted average of critical fields and transaction extraction). Do not default to 0.0 unless the extraction process fails completely (e.g., no text or parsing error). If some fields are successfully extracted with reasonable confidence, ensure confidence_level reflects that partial success. If confidence_level remains below the required minimum (e.g., < 0.7), flag the extraction for review or re-processing rather than returning a final JSON with 0.0.\n\n7. Null field prevention rule: Before returning the merged JSON, run a validation step that checks for null in required fields (statement_period_start, statement_period_end, statement_date, opening_balance, closing_balance, customer_name, mailing_address, transaction_count). If any are null, attempt targeted re-parsing for those specific fields. Only after these attempts fail and the document is classified as non-standard or incomplete should nulls be allowed, and in such cases, include an explicit reason or error flag in the internal logs.\n\n8. General merging robustness rule: When merging extractions from multiple models or passes, prefer non-null, higher-confidence values for each field. Avoid overwriting valid values with nulls during the merge. Implement a rule that any merge operation must preserve existing non-null values unless a replacement has strictly higher confidence and is not null.",
+        "confidence": "0.86",
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E26",
+        "created_at_utc": "2026-08-23T16:15:22.460320+00:00",
+        "bank_name": "NORTHGATE COMMERCIAL BANK",
+        "statement_id": "northgate_commercial_bank",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Transaction count must match transactions array length",
+                    "description": "Always derive `transaction_count` from the final `transactions` array, not from intermediate estimates or document summaries.",
+                    "rule": "After all parsing, merging, and deduplication steps are complete, set `transaction_count` = length(transactions). Do not override this with counts from statement summaries or other sources. If the statement provides a summary count (e.g., 34 credits + 81 debits = 115) and this differs from length(transactions), log a separate discrepancy flag but keep `transaction_count` equal to the actual array length.",
+                    "validation": "Before output, assert that `transaction_count === transactions.length`. If not, correct `transaction_count` to `transactions.length` and optionally record a warning about the mismatch."
+                },
+                {
+                    "name": "Confidence level must be realistic and within allowed range",
+                    "description": "Ensure `confidence_level` reflects actual extraction quality and respects configured thresholds.",
+                    "rule": "Do not use 0.0 as a default or placeholder for `confidence_level`. Compute confidence based on parsing success metrics (e.g., proportion of rows parsed, header fields recognized, numeric consistency checks passed). Clamp the final value to the inclusive range [0.0, 1.0]. If system requirements specify a minimum acceptable confidence (e.g., 0.7), then:\n- If computed confidence < minimum_threshold, either: (a) raise a validation error and mark the extraction as needing review, or (b) still output the data but clearly flag it as low-confidence.\n- Never output a `confidence_level` below the minimum threshold without an accompanying explicit flag indicating that the extraction does not meet quality requirements.",
+                    "validation": "Before output, enforce: 0.0 <= confidence_level <= 1.0. If confidence_level < required_min (e.g., 0.7), either adjust workflow (e.g., send to manual review) or reject the extraction; do not silently output a value that violates the contract."
+                },
+                {
+                    "name": "Opening balance validation with missing prior statement",
+                    "description": "Treat cross-statement checks as optional and non-blocking when prior data is unavailable.",
+                    "rule": "When validating `opening_balance`, follow this sequence:\n1) Primary check: Verify that `opening_balance` matches the \"Opening Balance\" value explicitly stated in the current document.\n2) Optional cross-check: If previous statement data is available, compare `opening_balance` to the previous statement’s `closing_balance`.\n3) If previous statement data is NOT available, do not mark `opening_balance` as an error. Instead, record an informational note such as `opening_balance_cross_check_skipped_due_to_missing_previous_statement`.\n\nNever convert the absence of prior-statement data into a validation error for the current statement’s opening balance.",
+                    "validation": "Before output, ensure that any message related to opening balance is either (a) a success confirmation, or (b) a non-blocking note about missing prior data. Do not include an error entry for `opening_balance` solely because previous statement data is unavailable."
+                },
+                {
+                    "name": "Final consistency pass for summary vs. detail fields",
+                    "description": "Perform a final reconciliation between high-level summary fields and detailed transaction data.",
+                    "rule": "Introduce a final validation step that checks:\n- `transaction_count` equals `transactions.length`.\n- The sum of all transaction amounts, when applied sequentially to `opening_balance`, yields `closing_balance` (within a small tolerance for rounding, if applicable).\n- Any category summaries (e.g., total debits, total credits, spending analysis) either match the detailed data or are clearly marked as document-provided summaries not recomputed by the system.\n\nIf discrepancies are found:\n- Correct fields that are purely derived (e.g., `transaction_count`) from the detailed data.\n- For document-provided summaries that differ from computed values, keep the raw extracted values but add a discrepancy flag rather than altering the document’s numbers.",
+                    "validation": "Require that all derived fields (counts, totals) are internally consistent with the `transactions` array before final output. If consistency cannot be achieved, mark the extraction as low-confidence and do not claim high confidence."
+                }
+            ]
+        },
+        "confidence": 0.95,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    },
+    {
+        "id": "E27",
+        "created_at_utc": "2026-08-23T16:24:58.866603+00:00",
+        "bank_name": "NORTHGATE COMMERCIAL BANK",
+        "statement_id": "northgate_commercial_bank",
+        "correction": {
+            "rules": [
+                {
+                    "name": "Derive transaction_count from the transactions array",
+                    "scope": "All bank statement extractions with a transactions array",
+                    "rule": "Always set `transaction_count` to the exact length of the final `transactions` array after all merging, deduplication, and filtering steps are complete. Do not copy `transaction_count` from intermediate sources or from the document summary without verifying against the actual array.",
+                    "implementation_guidelines": [
+                        "After building the final `transactions` array, compute `transaction_count = transactions.length`.",
+                        "If the source document provides a summary count (e.g., '34 credit transactions, 81 debit transactions'), use it only for validation, not as the authoritative value.",
+                        "If a discrepancy is found between the document summary and `transactions.length`, log a validation warning but keep `transaction_count` equal to `transactions.length`.",
+                        "During validation, fail the extraction only if `transactions.length` is clearly inconsistent with the document (e.g., obvious missing pages), but do not allow `transaction_count` to differ from `transactions.length`."
+                    ]
+                },
+                {
+                    "name": "Compute confidence_level from validation results and parsing quality",
+                    "scope": "All extractions that expose a numeric confidence_level",
+                    "rule": "Never leave `confidence_level` at a default of 0.0. Compute it based on field-level validation success, structural consistency, and OCR/parsing quality. Enforce a minimum threshold (e.g., 0.7) for extractions that pass validation.",
+                    "implementation_guidelines": [
+                        "Define a scoring model: start from a base score (e.g., 0.9) and subtract penalties for each validation issue (e.g., minor warning -0.05, major error -0.15).",
+                        "Treat non-blocking issues (like missing previous statement data) as warnings, not as errors, and apply only small penalties if needed.",
+                        "Clamp the final confidence_level to the range [0.0, 1.0].",
+                        "If the extraction passes all critical validations (required fields present, numeric fields parse correctly, internal sums consistent), ensure `confidence_level >= 0.7`.",
+                        "Only set `confidence_level < 0.7` when there are serious unresolved inconsistencies (e.g., balances not reconciling, missing key pages).",
+                        "Do not use 0.0 as a default; if the scoring pipeline fails, fall back to a conservative but non-zero default (e.g., 0.75) when the data appears structurally sound."
+                    ]
+                },
+                {
+                    "name": "Treat cross-statement balance checks as optional when prior data is missing",
+                    "scope": "Opening/closing balance validation across multiple statements",
+                    "rule": "When previous statement data is not available, do not mark `opening_balance` as erroneous. Instead, validate it only against the current document and record the absence of cross-statement validation as an informational note.",
+                    "implementation_guidelines": [
+                        "Primary validation: confirm that `opening_balance` matches the 'Opening Balance' value in the current statement's ACCOUNT SUMMARY section.",
+                        "If prior statement data (previous closing balance) is unavailable, skip the cross-period consistency check and do not generate an error.",
+                        "Record a non-blocking message such as 'Cross-statement balance continuity not checked due to missing previous statement.'",
+                        "Only raise a true error for `opening_balance` when it conflicts with the current document (e.g., parsing error, multiple inconsistent values on the same statement)."
+                    ]
+                },
+                {
+                    "name": "General meta-field alignment rule",
+                    "scope": "All meta fields derived from content (counts, totals, flags)",
+                    "rule": "Any meta field that summarizes or describes the content (e.g., transaction_count, number_of_pages, total_credits, total_debits) must be computed from the parsed content and then cross-checked against the document, rather than copied blindly from the document or intermediate sources.",
+                    "implementation_guidelines": [
+                        "For counts (transactions, pages, etc.), compute from the parsed structures and then compare with any stated counts in the document summary.",
+                        "For totals (e.g., total debits/credits), recompute from the transactions array and compare with the statement's ACCOUNT SUMMARY or SPENDING ANALYSIS sections.",
+                        "If differences are small and explainable (e.g., fees or interest excluded from a particular summary), log a warning but keep the computed meta fields consistent with the parsed data.",
+                        "Ensure that any inconsistency between meta fields and underlying arrays is treated as a validation signal to adjust confidence_level, not as a reason to let meta fields diverge from the actual data."
+                    ]
+                }
+            ],
+            "applied_corrections_example": {
+                "bank_name": "NORTHGATE COMMERCIAL BANK",
+                "account_number": "8842 0037 5591 2260",
+                "routing_number": "40-21-07",
+                "statement_period_start": "2026-06-01",
+                "statement_period_end": "2026-06-30",
+                "statement_date": "2026-07-01",
+                "opening_balance": 12480.55,
+                "closing_balance": 34371.87,
+                "customer_name": "Mr. Adrian T. Whitfield",
+                "mailing_address": "48 Rosewood Crescent, Apt 12B\nKingsford Heights\nMeridian City, MC 55108",
+                "transactions": "unchanged_from_input_but_used_as_authoritative_source_for_counts_and_totals",
+                "transaction_count": 114,
+                "confidence_level": 0.9,
+                "notes": [
+                    "transaction_count set to the actual length of the transactions array (114).",
+                    "confidence_level computed based on successful parsing and internal consistency; set to 0.9 (> 0.7).",
+                    "Opening balance validated against current statement only; cross-statement continuity not checked due to missing previous statement data."
+                ]
+            }
+        },
+        "confidence": 0.93,
+        "source": "reflection",
+        "human_feedback": false,
+        "semantic_promotion": false
+    }
+]

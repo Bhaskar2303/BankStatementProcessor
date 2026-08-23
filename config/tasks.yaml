@@ -1,0 +1,173 @@
+account_task:
+  description: |
+      
+      Extract only bank and account metadata from the bank statement document. 
+          Do not extract any other information from the document.
+
+          {memory_context}
+
+          Document:
+          {document_text}
+
+          Output JSON with the following structure:
+          {{
+            "bank_name": "String",
+            "account_number": "String",
+            "routing_number": "String",
+            "statement_period_start": "YYYY-MM-DD",
+            "statement_period_end": "YYYY-MM-DD",
+            "statement_date": "YYYY-MM-DD",
+            "opening_balance": "Number",
+            "closing_balance": "Number"
+          }}
+          use null for any missing values. Do not hallucinate and make up any data.
+          Only valid JSON should be returned. Do not include any other text or explanation.
+        
+  expected_output: A JSON object containing bank and account metadata, adhering to the specified structure.
+  agent: account
+
+identity_task:
+  description: |
+      
+      Extract only identity metadata from the bank statement document. 
+          Do not extract any other information from the document.
+
+          {memory_context}
+
+          Document:
+          {document_text}
+
+          Output JSON with the following structure:
+          {{
+            "customer_name": "String",
+            "mailing_address": "String"
+          }}
+          use null for any missing values. Do not hallucinate and make up any data.
+          Only valid JSON should be returned. Do not include any other text or explanation.
+        
+  expected_output: A JSON object containing identity metadata, adhering to the specified structure.
+  agent: identity
+
+transactions_task:
+  description: |
+      Extract only transactions metadata from the bank statement document. 
+          Do not extract any other information from the document.
+
+          {memory_context}
+
+          Document:
+          {document_text}
+
+          Output JSON with the following structure:
+          {{
+            "transactions": [
+              {{
+                "date": "YYYY-MM-DD",
+                "description": "String",
+                "amount": Number,
+                "balance_after_transaction": Number
+              }}
+            ],
+            "transaction_count": "Number"
+          }}
+          use null for any missing values. Do not hallucinate and make up any data.
+          Only valid JSON should be returned. Do not include any other text or explanation.
+  expected_output: A JSON object containing transactions metadata, adhering to the specified structure.
+  agent: transactions
+
+merge_task:
+  description: |
+      you are given three independent extraction results for the same bank statement document.
+      produced by three separate agents run in parallel. account and bank metadata, identity metadata, and transactions.
+      
+      ACCOUNT AND BANK METADATA:
+      {account_result}
+      
+      IDENTITY METADATA:
+      {identity_result}
+
+      TRANSACTIONS:
+      {transactions_result}
+
+      merge the three results into a single unifiedJSON object. 
+      Resolve any field naming inconsistencies.
+      dont present dat that is not present in the original results.
+      
+
+     
+
+      Return only Valid JSON with the following structure:
+      {{
+        "bank_name": "String",
+        "account_number": "String",
+        "routing_number": "String",
+        "statement_period_start": "YYYY-MM-DD",
+        "statement_period_end": "YYYY-MM-DD",
+        "statement_date": "YYYY-MM-DD",
+        "opening_balance": "Number",
+        "closing_balance": "Number",
+        "customer_name": "String",
+        "mailing_address": "String",
+        "transactions": [
+          {{
+            "date": "YYYY-MM-DD",
+            "description": "String",
+            "amount": Number,
+            "balance_after_transaction": Number
+          }}
+        ],
+        "transaction_count": "Number",
+        "confidence_level": "0.0-1.0"
+      }}
+      use null for any missing values. Do not hallucinate and make up any data.
+      Only valid JSON should be returned. Do not include any other text or explanation.
+  expected_output: A unified JSON object containing merged bank statement data, adhering to the specified structure.
+  agent: merge
+
+validation_task:
+  description: |
+      instructions to check:
+      1. statement_period end should be greater than or equal to statement_period start
+      2. statement_date should be greater than or equal to statement_period end
+      3. opening_balance should be equal to closing_balance of previous statement
+      4. customer_name and mailing_address should not be empty
+      5. transaction_count should be equal to the number of transactions in the transactions array
+      6. confidence_level should be greater than or equal to 0.7
+
+      Return only Valid JSON with the following structure:
+      {{
+        "is_valid": "yes/no",
+        "validation_errors": [
+          {{
+            "field": "name",
+            "message": "error"
+          }}
+        ]
+      }}
+  expected_output: A validation report indicating whether the merged JSON is valid, adhering to the specified structure.
+  agent: validation
+
+reflection_task:
+  description: |
+      Analysis of the bank statement extraction mistakes for {bank_name}
+      Statement ID:
+      {statement_id}
+      
+      Source Document:
+      {document_text}
+
+      MERGED_EXTRACTION:
+      {merged_final_result}
+      
+      ERRORS:
+      {errors}
+
+      Return only Valid JSON:
+      {{
+        "mistake_description": "what went wrong in detail",
+        "corrected_extraction": "clear concise rule to prevent this. generalized to future cases.",
+        "confidence_level": "0.0-1.0"
+      }}
+      only valid JSON should be returned.
+  expected_output: A reflection report providing insights, potential issues, and recommendations regarding the merged JSON data, adhering to the specified structure.
+  agent: reflection

@@ -1,0 +1,2 @@
+run_id,run_timestamp_utc,document_name,stage,model_name,prompt_tokens,completion_tokens,total_tokens,input_cost_usd,output_cost_usd,total_cost_usd
+bea9f607-37c8-486f-8ae1-9a1f593ec293,2026-08-23T16:24:59.880027+00:00,northgate_commercial_bank.pdf,streamlit_pipeline_run,azure/gpt4o_mktgenai,160744,8753,169497,0.0241116,0.0052518,0.0293634

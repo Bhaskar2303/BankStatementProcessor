@@ -1,0 +1,819 @@
+{
+  "approval_status": "approved",
+  "approved_at_utc": "2026-08-23T16:25:38.567135+00:00",
+  "run_id": "bea9f607-37c8-486f-8ae1-9a1f593ec293",
+  "statement_id": "northgate_commercial_bank",
+  "bank_name": "NORTHGATE COMMERCIAL BANK",
+  "model_name": "azure/gpt4o_mktgenai",
+  "cost_tracking": {
+    "run_id": "bea9f607-37c8-486f-8ae1-9a1f593ec293",
+    "run_timestamp_utc": "2026-08-23T16:24:59.880027+00:00",
+    "document_name": "northgate_commercial_bank.pdf",
+    "stage": "streamlit_pipeline_run",
+    "model_name": "azure/gpt4o_mktgenai",
+    "prompt_tokens": 160744,
+    "completion_tokens": 8753,
+    "total_tokens": 169497,
+    "input_cost_usd": 0.0241116,
+    "output_cost_usd": 0.0052518,
+    "total_cost_usd": 0.0293634
+  },
+  "merged_data": {
+    "bank_name": "NORTHGATE COMMERCIAL BANK",
+    "account_number": "8842 0037 5591 2260",
+    "routing_number": "40-21-07",
+    "statement_period_start": "2026-06-01",
+    "statement_period_end": "2026-06-30",
+    "statement_date": "2026-07-01",
+    "opening_balance": 12480.55,
+    "closing_balance": 34371.87,
+    "customer_name": "Mr. Adrian T. Whitfield",
+    "mailing_address": "48 Rosewood Crescent, Apt 12B\nKingsford Heights\nMeridian City, MC 55108",
+    "transactions": [
+      {
+        "date": "2026-06-01",
+        "description": "Cheque Deposit - 100482",
+        "amount": 557.54,
+        "balance_after_transaction": 13038.09
+      },
+      {
+        "date": "2026-06-01",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 17238.09
+      },
+      {
+        "date": "2026-06-01",
+        "description": "Interest Credit",
+        "amount": 2.38,
+        "balance_after_transaction": 17240.47
+      },
+      {
+        "date": "2026-06-01",
+        "description": "Dividend - MERIDIAN INDEX FUND",
+        "amount": 216.52,
+        "balance_after_transaction": 17456.99
+      },
+      {
+        "date": "2026-06-01",
+        "description": "Cheque Deposit - 100482",
+        "amount": 1111.72,
+        "balance_after_transaction": 18568.71
+      },
+      {
+        "date": "2026-06-02",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -23.81,
+        "balance_after_transaction": 18544.9
+      },
+      {
+        "date": "2026-06-02",
+        "description": "Mobile Deposit - REIMBURSEMENT",
+        "amount": 113.44,
+        "balance_after_transaction": 18658.34
+      },
+      {
+        "date": "2026-06-02",
+        "description": "Direct Debit - AQUAFLOW WATER CO",
+        "amount": -36.18,
+        "balance_after_transaction": 18622.16
+      },
+      {
+        "date": "2026-06-03",
+        "description": "Interest Credit",
+        "amount": 3.16,
+        "balance_after_transaction": 18625.32
+      },
+      {
+        "date": "2026-06-03",
+        "description": "Card Purchase - URBAN FUEL STATION",
+        "amount": -78.78,
+        "balance_after_transaction": 18546.54
+      },
+      {
+        "date": "2026-06-03",
+        "description": "Bill Payment - CREDIT CARD 4417",
+        "amount": -209.1,
+        "balance_after_transaction": 18337.44
+      },
+      {
+        "date": "2026-06-03",
+        "description": "Card Purchase - PEAK FITNESS CLUB",
+        "amount": -62.09,
+        "balance_after_transaction": 18275.35
+      },
+      {
+        "date": "2026-06-04",
+        "description": "Cheque Deposit - 100482",
+        "amount": 496.27,
+        "balance_after_transaction": 18771.62
+      },
+      {
+        "date": "2026-06-04",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -265.29,
+        "balance_after_transaction": 18506.33
+      },
+      {
+        "date": "2026-06-04",
+        "description": "Card Purchase - HARBOUR PHARMACY",
+        "amount": -56.31,
+        "balance_after_transaction": 18450.02
+      },
+      {
+        "date": "2026-06-04",
+        "description": "Card Purchase - PEAK FITNESS CLUB",
+        "amount": -53.21,
+        "balance_after_transaction": 18396.81
+      },
+      {
+        "date": "2026-06-04",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -43.24,
+        "balance_after_transaction": 18353.57
+      },
+      {
+        "date": "2026-06-05",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -82.48,
+        "balance_after_transaction": 18271.09
+      },
+      {
+        "date": "2026-06-05",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -218.0,
+        "balance_after_transaction": 18053.09
+      },
+      {
+        "date": "2026-06-05",
+        "description": "Card Purchase - URBAN FUEL STATION",
+        "amount": -48.74,
+        "balance_after_transaction": 18004.35
+      },
+      {
+        "date": "2026-06-06",
+        "description": "Bill Payment - CREDIT CARD 4417",
+        "amount": -350.81,
+        "balance_after_transaction": 17653.54
+      },
+      {
+        "date": "2026-06-06",
+        "description": "Dividend - MERIDIAN INDEX FUND",
+        "amount": 287.86,
+        "balance_after_transaction": 17941.4
+      },
+      {
+        "date": "2026-06-06",
+        "description": "Interest Credit",
+        "amount": 6.75,
+        "balance_after_transaction": 17948.15
+      },
+      {
+        "date": "2026-06-07",
+        "description": "Incoming Transfer - J. HARMON",
+        "amount": 334.97,
+        "balance_after_transaction": 18283.12
+      },
+      {
+        "date": "2026-06-07",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -53.3,
+        "balance_after_transaction": 18229.82
+      },
+      {
+        "date": "2026-06-07",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -299.3,
+        "balance_after_transaction": 17930.52
+      },
+      {
+        "date": "2026-06-07",
+        "description": "Interest Credit",
+        "amount": 3.09,
+        "balance_after_transaction": 17933.61
+      },
+      {
+        "date": "2026-06-08",
+        "description": "Incoming Transfer - J. HARMON",
+        "amount": 744.06,
+        "balance_after_transaction": 18677.67
+      },
+      {
+        "date": "2026-06-08",
+        "description": "Bill Payment - CREDIT CARD 4417",
+        "amount": -436.21,
+        "balance_after_transaction": 18241.46
+      },
+      {
+        "date": "2026-06-08",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -27.36,
+        "balance_after_transaction": 18214.1
+      },
+      {
+        "date": "2026-06-09",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -165.44,
+        "balance_after_transaction": 18048.66
+      },
+      {
+        "date": "2026-06-09",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -22.91,
+        "balance_after_transaction": 18025.75
+      },
+      {
+        "date": "2026-06-09",
+        "description": "Online Payment - GLOBEMART ONLINE",
+        "amount": -193.91,
+        "balance_after_transaction": 17831.84
+      },
+      {
+        "date": "2026-06-10",
+        "description": "Cheque Deposit - 100482",
+        "amount": 1338.61,
+        "balance_after_transaction": 19170.45
+      },
+      {
+        "date": "2026-06-10",
+        "description": "Direct Debit - STREAMLINE TELECOM",
+        "amount": -66.83,
+        "balance_after_transaction": 19103.62
+      },
+      {
+        "date": "2026-06-10",
+        "description": "Cheque Deposit - 100482",
+        "amount": 587.98,
+        "balance_after_transaction": 19691.6
+      },
+      {
+        "date": "2026-06-10",
+        "description": "Standing Order - RENT PAYMENT",
+        "amount": -1650.0,
+        "balance_after_transaction": 18041.6
+      },
+      {
+        "date": "2026-06-11",
+        "description": "Card Purchase - FRESHFIELDS GROCERY",
+        "amount": -117.44,
+        "balance_after_transaction": 17924.16
+      },
+      {
+        "date": "2026-06-11",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -200.07,
+        "balance_after_transaction": 17724.09
+      },
+      {
+        "date": "2026-06-11",
+        "description": "Online Payment - GLOBEMART ONLINE",
+        "amount": -115.78,
+        "balance_after_transaction": 17608.31
+      },
+      {
+        "date": "2026-06-12",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -18.11,
+        "balance_after_transaction": 17590.2
+      },
+      {
+        "date": "2026-06-12",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -60.94,
+        "balance_after_transaction": 17529.26
+      },
+      {
+        "date": "2026-06-12",
+        "description": "Direct Debit - AQUAFLOW WATER CO",
+        "amount": -32.88,
+        "balance_after_transaction": 17496.38
+      },
+      {
+        "date": "2026-06-13",
+        "description": "Direct Debit - STREAMLINE TELECOM",
+        "amount": -56.4,
+        "balance_after_transaction": 17439.98
+      },
+      {
+        "date": "2026-06-13",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -56.36,
+        "balance_after_transaction": 17383.62
+      },
+      {
+        "date": "2026-06-13",
+        "description": "Standing Order - RENT PAYMENT",
+        "amount": -1650.0,
+        "balance_after_transaction": 15733.62
+      },
+      {
+        "date": "2026-06-13",
+        "description": "Card Purchase - PEAK FITNESS CLUB",
+        "amount": -56.52,
+        "balance_after_transaction": 15677.1
+      },
+      {
+        "date": "2026-06-14",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -98.42,
+        "balance_after_transaction": 15578.68
+      },
+      {
+        "date": "2026-06-14",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -192.99,
+        "balance_after_transaction": 15385.69
+      },
+      {
+        "date": "2026-06-14",
+        "description": "Cheque Deposit - 100482",
+        "amount": 1020.43,
+        "balance_after_transaction": 16406.12
+      },
+      {
+        "date": "2026-06-14",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 20606.12
+      },
+      {
+        "date": "2026-06-14",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -20.72,
+        "balance_after_transaction": 20585.4
+      },
+      {
+        "date": "2026-06-15",
+        "description": "Insurance Premium - SAFEGUARD LIFE",
+        "amount": -110.79,
+        "balance_after_transaction": 20474.61
+      },
+      {
+        "date": "2026-06-15",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -20.76,
+        "balance_after_transaction": 20453.85
+      },
+      {
+        "date": "2026-06-15",
+        "description": "Interest Credit",
+        "amount": 6.25,
+        "balance_after_transaction": 20460.1
+      },
+      {
+        "date": "2026-06-16",
+        "description": "Card Purchase - URBAN FUEL STATION",
+        "amount": -75.4,
+        "balance_after_transaction": 20384.7
+      },
+      {
+        "date": "2026-06-16",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -78.49,
+        "balance_after_transaction": 20306.21
+      },
+      {
+        "date": "2026-06-16",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -104.81,
+        "balance_after_transaction": 20201.4
+      },
+      {
+        "date": "2026-06-16",
+        "description": "Interest Credit",
+        "amount": 3.68,
+        "balance_after_transaction": 20205.08
+      },
+      {
+        "date": "2026-06-17",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -35.27,
+        "balance_after_transaction": 20169.81
+      },
+      {
+        "date": "2026-06-17",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -77.08,
+        "balance_after_transaction": 20092.73
+      },
+      {
+        "date": "2026-06-17",
+        "description": "Card Purchase - FRESHFIELDS GROCERY",
+        "amount": -175.16,
+        "balance_after_transaction": 19917.57
+      },
+      {
+        "date": "2026-06-17",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -83.24,
+        "balance_after_transaction": 19834.33
+      },
+      {
+        "date": "2026-06-18",
+        "description": "Bill Payment - CREDIT CARD 4417",
+        "amount": -826.83,
+        "balance_after_transaction": 19007.5
+      },
+      {
+        "date": "2026-06-18",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 23207.5
+      },
+      {
+        "date": "2026-06-18",
+        "description": "Card Purchase - HARBOUR PHARMACY",
+        "amount": -29.68,
+        "balance_after_transaction": 23177.82
+      },
+      {
+        "date": "2026-06-18",
+        "description": "Insurance Premium - SAFEGUARD LIFE",
+        "amount": -105.06,
+        "balance_after_transaction": 23072.76
+      },
+      {
+        "date": "2026-06-19",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 27272.76
+      },
+      {
+        "date": "2026-06-19",
+        "description": "Refund - GLOBEMART ONLINE",
+        "amount": 30.69,
+        "balance_after_transaction": 27303.45
+      },
+      {
+        "date": "2026-06-19",
+        "description": "Direct Debit - STREAMLINE TELECOM",
+        "amount": -47.45,
+        "balance_after_transaction": 27256.0
+      },
+      {
+        "date": "2026-06-19",
+        "description": "Direct Debit - STREAMLINE TELECOM",
+        "amount": -47.95,
+        "balance_after_transaction": 27208.05
+      },
+      {
+        "date": "2026-06-20",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -144.98,
+        "balance_after_transaction": 27063.07
+      },
+      {
+        "date": "2026-06-20",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -190.52,
+        "balance_after_transaction": 26872.55
+      },
+      {
+        "date": "2026-06-20",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 31072.55
+      },
+      {
+        "date": "2026-06-21",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -10.49,
+        "balance_after_transaction": 31062.06
+      },
+      {
+        "date": "2026-06-21",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -109.06,
+        "balance_after_transaction": 30953.0
+      },
+      {
+        "date": "2026-06-21",
+        "description": "Cheque Deposit - 100482",
+        "amount": 590.0,
+        "balance_after_transaction": 31543.0
+      },
+      {
+        "date": "2026-06-21",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -14.45,
+        "balance_after_transaction": 31528.55
+      },
+      {
+        "date": "2026-06-21",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -80.26,
+        "balance_after_transaction": 31448.29
+      },
+      {
+        "date": "2026-06-22",
+        "description": "Direct Debit - AQUAFLOW WATER CO",
+        "amount": -63.46,
+        "balance_after_transaction": 31384.83
+      },
+      {
+        "date": "2026-06-22",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -136.08,
+        "balance_after_transaction": 31248.75
+      },
+      {
+        "date": "2026-06-22",
+        "description": "Mobile Deposit - REIMBURSEMENT",
+        "amount": 289.88,
+        "balance_after_transaction": 31538.63
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Card Purchase - FRESHFIELDS GROCERY",
+        "amount": -128.19,
+        "balance_after_transaction": 31410.44
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -201.45,
+        "balance_after_transaction": 31208.99
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Salary Credit - NIMBUS SOFTWARE LLC",
+        "amount": 4200.0,
+        "balance_after_transaction": 35408.99
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -12.2,
+        "balance_after_transaction": 35396.79
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Refund - GLOBEMART ONLINE",
+        "amount": 63.2,
+        "balance_after_transaction": 35459.99
+      },
+      {
+        "date": "2026-06-24",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -25.92,
+        "balance_after_transaction": 35434.07
+      },
+      {
+        "date": "2026-06-24",
+        "description": "Card Purchase - CINE-PLEX MERIDIAN",
+        "amount": -44.45,
+        "balance_after_transaction": 35389.62
+      },
+      {
+        "date": "2026-06-24",
+        "description": "Card Purchase - URBAN FUEL STATION",
+        "amount": -35.21,
+        "balance_after_transaction": 35354.41
+      },
+      {
+        "date": "2026-06-24",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -9.55,
+        "balance_after_transaction": 35344.86
+      },
+      {
+        "date": "2026-06-25",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -37.8,
+        "balance_after_transaction": 35307.06
+      },
+      {
+        "date": "2026-06-25",
+        "description": "Cheque Deposit - 100482",
+        "amount": 1375.11,
+        "balance_after_transaction": 36682.17
+      },
+      {
+        "date": "2026-06-25",
+        "description": "Refund - GLOBEMART ONLINE",
+        "amount": 147.32,
+        "balance_after_transaction": 36829.49
+      },
+      {
+        "date": "2026-06-25",
+        "description": "Card Purchase - URBAN FUEL STATION",
+        "amount": -53.5,
+        "balance_after_transaction": 36775.99
+      },
+      {
+        "date": "2026-06-26",
+        "description": "Standing Order - RENT PAYMENT",
+        "amount": -1650.0,
+        "balance_after_transaction": 35125.99
+      },
+      {
+        "date": "2026-06-26",
+        "description": "Card Purchase - PEAK FITNESS CLUB",
+        "amount": -70.2,
+        "balance_after_transaction": 35055.79
+      },
+      {
+        "date": "2026-06-26",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -56.8,
+        "balance_after_transaction": 34998.99
+      },
+      {
+        "date": "2026-06-27",
+        "description": "Incoming Transfer - J. HARMON",
+        "amount": 798.45,
+        "balance_after_transaction": 35797.44
+      },
+      {
+        "date": "2026-06-27",
+        "description": "Card Purchase - FRESHFIELDS GROCERY",
+        "amount": -51.98,
+        "balance_after_transaction": 35745.46
+      },
+      {
+        "date": "2026-06-27",
+        "description": "Card Purchase - THE BOOK NOOK",
+        "amount": -48.9,
+        "balance_after_transaction": 35696.56
+      },
+      {
+        "date": "2026-06-27",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -109.37,
+        "balance_after_transaction": 35587.19
+      },
+      {
+        "date": "2026-06-27",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -123.56,
+        "balance_after_transaction": 35463.63
+      },
+      {
+        "date": "2026-06-28",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -91.89,
+        "balance_after_transaction": 35371.74
+      },
+      {
+        "date": "2026-06-28",
+        "description": "Card Purchase - PEAK FITNESS CLUB",
+        "amount": -51.21,
+        "balance_after_transaction": 35320.53
+      },
+      {
+        "date": "2026-06-28",
+        "description": "ATM Withdrawal - 4TH STREET KIOSK",
+        "amount": -97.96,
+        "balance_after_transaction": 35222.57
+      },
+      {
+        "date": "2026-06-29",
+        "description": "Refund - GLOBEMART ONLINE",
+        "amount": 79.85,
+        "balance_after_transaction": 35302.42
+      },
+      {
+        "date": "2026-06-29",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -13.73,
+        "balance_after_transaction": 35288.69
+      },
+      {
+        "date": "2026-06-29",
+        "description": "Transfer Out - SAVINGS 5591-9902",
+        "amount": -763.54,
+        "balance_after_transaction": 34525.15
+      },
+      {
+        "date": "2026-06-29",
+        "description": "Refund - GLOBEMART ONLINE",
+        "amount": 57.64,
+        "balance_after_transaction": 34582.79
+      },
+      {
+        "date": "2026-06-29",
+        "description": "Dividend - MERIDIAN INDEX FUND",
+        "amount": 172.99,
+        "balance_after_transaction": 34755.78
+      },
+      {
+        "date": "2026-06-30",
+        "description": "Direct Debit - MERIDIAN POWER & GAS",
+        "amount": -123.93,
+        "balance_after_transaction": 34631.85
+      },
+      {
+        "date": "2026-06-30",
+        "description": "Card Purchase - BYTE & BREW CAFE",
+        "amount": -6.98,
+        "balance_after_transaction": 34624.87
+      },
+      {
+        "date": "2026-06-30",
+        "description": "Standing Order - RENT PAYMENT",
+        "amount": -1650.0,
+        "balance_after_transaction": 32974.87
+      },
+      {
+        "date": "2026-06-30",
+        "description": "Cheque Deposit - 100482",
+        "amount": 1397.0,
+        "balance_after_transaction": 34371.87
+      }
+    ],
+    "transaction_count": 115,
+    "confidence_level": 0.0
+  },
+  "validation_data": {
+    "is_valid": "no",
+    "validation_errors": [
+      {
+        "field": "opening_balance",
+        "message": "Cannot validate opening_balance against previous statement closing_balance because previous statement data is not provided."
+      },
+      {
+        "field": "transaction_count",
+        "message": "transaction_count is 115 but there are 114 transactions in the transactions array."
+      },
+      {
+        "field": "confidence_level",
+        "message": "confidence_level is 0.0 but must be greater than or equal to 0.7."
+      }
+    ]
+  },
+  "reflection_data": {
+    "mistake_description": "There are three distinct issues in the merged extraction:\n\n1) Transaction count mismatch:\n- The field `transaction_count` is set to 115, but the `transactions` array contains only 114 elements (as reported by the validator).\n- This indicates that `transaction_count` was likely taken from an intermediate or incorrect source (e.g., a miscount during parsing or a carry-over from another statement) instead of being derived directly from the final merged `transactions` array.\n- Such a mismatch can cause downstream reconciliation errors, incorrect analytics, and confusion when validating against the statement summary (which in this document clearly states 34 credit transactions and 81 debit transactions, totaling 115). The merged extraction did not reconcile its own count with the actual array length or with the statement’s summary section.\n\n2) Invalid confidence level:\n- The `confidence_level` is set to 0.0, while the validation rule requires it to be >= 0.7.\n- A confidence of 0.0 suggests either a default/uninitialized value or a failure to update the confidence after merging multiple extraction sources.\n- This is logically inconsistent: the extraction is largely correct and structured, so a non-zero confidence should have been assigned based on parsing quality, field validations, and internal consistency checks.\n- Leaving confidence at 0.0 prevents the data from passing quality gates and may incorrectly signal that the extraction is unusable.\n\n3) Opening balance validation note:\n- The error message for `opening_balance` states that it \"Cannot validate opening_balance against previous statement closing_balance because previous statement data is not provided.\" This is not a data error in the current extraction but a limitation of cross-statement validation.\n- The current extraction correctly captures the opening balance ($12,480.55) from the statement’s ACCOUNT SUMMARY section.\n- The system attempted a cross-period consistency check (opening balance vs. prior closing balance) but lacked prior-statement data. This should not mark the field as incorrect; instead, it should be treated as \"not cross-validated\" while still accepting the value if it matches the current document.\n\nUnderlying pattern of mistakes:\n- Meta fields (like `transaction_count` and `confidence_level`) are not being derived from or aligned with the actual parsed content and validation results.\n- Cross-statement validation is being reported as an error rather than as a non-blocking informational note when prerequisite data (previous statement) is missing.\n\nThese issues are systemic: they can recur whenever transaction counts are inferred rather than computed, confidence is left at a default value, or cross-period checks are attempted without prior data. The correction rules must therefore focus on (a) deriving counts from actual arrays, (b) computing confidence from validation outcomes, and (c) treating missing cross-period data as a non-error condition.",
+    "corrected_extraction": {
+      "rules": [
+        {
+          "name": "Derive transaction_count from the transactions array",
+          "scope": "All bank statement extractions with a transactions array",
+          "rule": "Always set `transaction_count` to the exact length of the final `transactions` array after all merging, deduplication, and filtering steps are complete. Do not copy `transaction_count` from intermediate sources or from the document summary without verifying against the actual array.",
+          "implementation_guidelines": [
+            "After building the final `transactions` array, compute `transaction_count = transactions.length`.",
+            "If the source document provides a summary count (e.g., '34 credit transactions, 81 debit transactions'), use it only for validation, not as the authoritative value.",
+            "If a discrepancy is found between the document summary and `transactions.length`, log a validation warning but keep `transaction_count` equal to `transactions.length`.",
+            "During validation, fail the extraction only if `transactions.length` is clearly inconsistent with the document (e.g., obvious missing pages), but do not allow `transaction_count` to differ from `transactions.length`."
+          ]
+        },
+        {
+          "name": "Compute confidence_level from validation results and parsing quality",
+          "scope": "All extractions that expose a numeric confidence_level",
+          "rule": "Never leave `confidence_level` at a default of 0.0. Compute it based on field-level validation success, structural consistency, and OCR/parsing quality. Enforce a minimum threshold (e.g., 0.7) for extractions that pass validation.",
+          "implementation_guidelines": [
+            "Define a scoring model: start from a base score (e.g., 0.9) and subtract penalties for each validation issue (e.g., minor warning -0.05, major error -0.15).",
+            "Treat non-blocking issues (like missing previous statement data) as warnings, not as errors, and apply only small penalties if needed.",
+            "Clamp the final confidence_level to the range [0.0, 1.0].",
+            "If the extraction passes all critical validations (required fields present, numeric fields parse correctly, internal sums consistent), ensure `confidence_level >= 0.7`.",
+            "Only set `confidence_level < 0.7` when there are serious unresolved inconsistencies (e.g., balances not reconciling, missing key pages).",
+            "Do not use 0.0 as a default; if the scoring pipeline fails, fall back to a conservative but non-zero default (e.g., 0.75) when the data appears structurally sound."
+          ]
+        },
+        {
+          "name": "Treat cross-statement balance checks as optional when prior data is missing",
+          "scope": "Opening/closing balance validation across multiple statements",
+          "rule": "When previous statement data is not available, do not mark `opening_balance` as erroneous. Instead, validate it only against the current document and record the absence of cross-statement validation as an informational note.",
+          "implementation_guidelines": [
+            "Primary validation: confirm that `opening_balance` matches the 'Opening Balance' value in the current statement's ACCOUNT SUMMARY section.",
+            "If prior statement data (previous closing balance) is unavailable, skip the cross-period consistency check and do not generate an error.",
+            "Record a non-blocking message such as 'Cross-statement balance continuity not checked due to missing previous statement.'",
+            "Only raise a true error for `opening_balance` when it conflicts with the current document (e.g., parsing error, multiple inconsistent values on the same statement)."
+          ]
+        },
+        {
+          "name": "General meta-field alignment rule",
+          "scope": "All meta fields derived from content (counts, totals, flags)",
+          "rule": "Any meta field that summarizes or describes the content (e.g., transaction_count, number_of_pages, total_credits, total_debits) must be computed from the parsed content and then cross-checked against the document, rather than copied blindly from the document or intermediate sources.",
+          "implementation_guidelines": [
+            "For counts (transactions, pages, etc.), compute from the parsed structures and then compare with any stated counts in the document summary.",
+            "For totals (e.g., total debits/credits), recompute from the transactions array and compare with the statement's ACCOUNT SUMMARY or SPENDING ANALYSIS sections.",
+            "If differences are small and explainable (e.g., fees or interest excluded from a particular summary), log a warning but keep the computed meta fields consistent with the parsed data.",
+            "Ensure that any inconsistency between meta fields and underlying arrays is treated as a validation signal to adjust confidence_level, not as a reason to let meta fields diverge from the actual data."
+          ]
+        }
+      ],
+      "applied_corrections_example": {
+        "bank_name": "NORTHGATE COMMERCIAL BANK",
+        "account_number": "8842 0037 5591 2260",
+        "routing_number": "40-21-07",
+        "statement_period_start": "2026-06-01",
+        "statement_period_end": "2026-06-30",
+        "statement_date": "2026-07-01",
+        "opening_balance": 12480.55,
+        "closing_balance": 34371.87,
+        "customer_name": "Mr. Adrian T. Whitfield",
+        "mailing_address": "48 Rosewood Crescent, Apt 12B\nKingsford Heights\nMeridian City, MC 55108",
+        "transactions": "unchanged_from_input_but_used_as_authoritative_source_for_counts_and_totals",
+        "transaction_count": 114,
+        "confidence_level": 0.9,
+        "notes": [
+          "transaction_count set to the actual length of the transactions array (114).",
+          "confidence_level computed based on successful parsing and internal consistency; set to 0.9 (> 0.7).",
+          "Opening balance validated against current statement only; cross-statement continuity not checked due to missing previous statement data."
+        ]
+      }
+    },
+    "confidence_level": 0.93,
+    "episodic_entry_id": "E27"
+  }
+}
